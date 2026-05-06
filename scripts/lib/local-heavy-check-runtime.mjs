@@ -189,9 +189,10 @@ export function acquireLocalHeavyCheckLockSync(params) {
   }
 
   const commonDir = resolveGitCommonDir(params.cwd);
-  const locksDir = path.join(commonDir, "openclaw-local-checks");
-  const lockDir = path.join(locksDir, `${params.lockName ?? "heavy-check"}.lock`);
-  const ownerPath = path.join(lockDir, "owner.json");
+  const fallbackCommonDir = path.join(params.cwd, ".artifacts");
+  let locksDir = path.join(commonDir, "openclaw-local-checks");
+  let lockDir = path.join(locksDir, `${params.lockName ?? "heavy-check"}.lock`);
+  let ownerPath = path.join(lockDir, "owner.json");
   const timeoutMs = readPositiveInt(
     env.OPENCLAW_HEAVY_CHECK_LOCK_TIMEOUT_MS,
     DEFAULT_LOCK_TIMEOUT_MS,
@@ -209,7 +210,20 @@ export function acquireLocalHeavyCheckLockSync(params) {
   let waitingLogged = false;
   let lastProgressAt = 0;
 
-  fs.mkdirSync(locksDir, { recursive: true });
+  try {
+    fs.mkdirSync(locksDir, { recursive: true });
+  } catch (error) {
+    if (!isPermissionError(error)) {
+      throw error;
+    }
+    locksDir = path.join(fallbackCommonDir, "openclaw-local-checks");
+    lockDir = path.join(locksDir, `${params.lockName ?? "heavy-check"}.lock`);
+    ownerPath = path.join(lockDir, "owner.json");
+    fs.mkdirSync(locksDir, { recursive: true });
+    console.error(
+      `[${params.toolName}] could not use local heavy-check lock dir at ${path.join(commonDir, "openclaw-local-checks")}: ${error.code ?? "EACCES"}. Falling back to ${locksDir}.`,
+    );
+  }
   if (!params.lockName) {
     cleanupLegacyLockDirs(locksDir, staleLockMs);
   }
@@ -229,13 +243,32 @@ export function acquireLocalHeavyCheckLockSync(params) {
       };
     } catch (error) {
       if (!isAlreadyExistsError(error)) {
+        if (
+          isPermissionError(error) &&
+          !lockDir.startsWith(path.join(fallbackCommonDir, "openclaw-local-checks"))
+        ) {
+          locksDir = path.join(fallbackCommonDir, "openclaw-local-checks");
+          lockDir = path.join(locksDir, `${params.lockName ?? "heavy-check"}.lock`);
+          ownerPath = path.join(lockDir, "owner.json");
+          fs.mkdirSync(locksDir, { recursive: true });
+          console.error(
+            `[${params.toolName}] could not acquire heavy-check lock under ${path.join(commonDir, "openclaw-local-checks")}: ${error.code ?? "EACCES"}. Falling back to ${locksDir}.`,
+          );
+          continue;
+        }
         throw error;
       }
 
       const owner = readOwnerFile(ownerPath);
       if (shouldReclaimLock({ owner, lockDir, staleLockMs })) {
-        fs.rmSync(lockDir, { recursive: true, force: true });
-        continue;
+        try {
+          fs.rmSync(lockDir, { recursive: true, force: true });
+          continue;
+        } catch (cleanupError) {
+          if (!isPermissionError(cleanupError)) {
+            throw cleanupError;
+          }
+        }
       }
 
       const elapsedMs = Date.now() - startedAt;
@@ -356,6 +389,15 @@ function readOwnerFile(ownerPath) {
 
 function isAlreadyExistsError(error) {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === "EEXIST");
+}
+
+function isPermissionError(error) {
+  return Boolean(
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error.code === "EPERM" || error.code === "EACCES"),
+  );
 }
 
 function shouldReclaimLock({ owner, lockDir, staleLockMs }) {
