@@ -1,0 +1,56 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_rollback_contract_coverage_report.v1",
+  "created_at": "2026-05-06T21:47:55.873Z",
+  "dry_run": true,
+  "read_only": true,
+  "source_rollback_contract_fixture": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-rollback-contract-fixture.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "coverage_pass",
+  "operation": "create",
+  "validation_status": "pass",
+  "failures": [],
+  "coverage": {
+    "required_fields_checked": [
+      "rollback_contract.flow_id",
+      "rollback_contract.registry_target",
+      "rollback_contract.original_operation",
+      "rollback_contract.rollback_operation",
+      "rollback_contract.rollback_trigger",
+      "rollback_contract.commit_strategy",
+      "rollback_contract.taskflow_registry_write",
+      "rollback_contract.sqlite_write",
+      "rollback_contract.requires_operator_review",
+      "rollback_contract.restore_source",
+      "rollback_contract.rollback_path"
+    ],
+    "safety_flags_checked": [
+      "operator_approved",
+      "registry_write_allowed",
+      "taskflow_registry_write",
+      "sqlite_write",
+      "worker_execution",
+      "model_invoked",
+      "rollback_contract.commit_strategy",
+      "rollback_contract.taskflow_registry_write",
+      "rollback_contract.sqlite_write"
+    ],
+    "required_fields_passed": true,
+    "safety_flags_passed": true,
+    "coverage_ratio": 1
+  },
+  "operator_approved": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "blocked_actions": [
+    "Task Flow registry write",
+    "SQLite registry mutation",
+    "worker execution from rollback contract coverage report",
+    "model invocation during rollback contract coverage report",
+    "automatic promotion from rollback contract coverage to real writer"
+  ],
+  "rollback_path": "Discard this read-only rollback contract coverage report; it did not persist registry, SQLite, worker, or model state.",
+  "next_safe_task": "Add a read-only final writer readiness summary before any real Task Flow registry writer exists."
+}

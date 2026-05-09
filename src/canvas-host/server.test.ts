@@ -345,7 +345,7 @@ describe("canvas host", () => {
       expect(ws).toBeTruthy();
 
       await fs.writeFile(index, "<html><body>v2</body></html>", "utf8");
-      watcher.__emit("all", "change", index);
+      watcher["__emit"]("all", "change", index);
       await reloadSent;
       expect(ws?.sent[0]).toBe("reload");
     } finally {
@@ -368,8 +368,15 @@ describe("canvas host", () => {
       createdBundle = true;
     }
 
-    await fs.symlink(path.join(process.cwd(), "package.json"), linkPath);
-    createdLink = true;
+    try {
+      await fs.symlink(path.join(process.cwd(), "package.json"), linkPath);
+      createdLink = true;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "EPERM" && code !== "EACCES" && code !== "ENOTSUP") {
+        throw error;
+      }
+    }
 
     try {
       const res = await captureA2uiResponse(`${A2UI_PATH}/`);

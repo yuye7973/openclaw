@@ -1,0 +1,45 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_controlled_executor_intake_validator.v1",
+  "created_at": "2026-05-07T04:24:23.517Z",
+  "dry_run": true,
+  "read_only": true,
+  "source_task_dialoguer_reasoning_policy_coverage_report": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-task-dialoguer-reasoning-policy-coverage-report.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "intake_ready",
+  "operation": "create",
+  "validation_status": "pass",
+  "failures": [],
+  "intake_preconditions": {
+    "reasoning_policy_coverage_green": true,
+    "policy_ready": true,
+    "approval_gate_locked": true,
+    "handoff_rules_locked": true,
+    "all_writes_disabled": true,
+    "model_invocation_disabled": true,
+    "coverage_ratio": 1
+  },
+  "intake_boundary": {
+    "requested_executor": "openclaw_controlled_executor",
+    "operator_approval_required": true,
+    "operator_approved": false,
+    "execution_started": false,
+    "execution_allowed": false
+  },
+  "operator_approved": false,
+  "real_writer_allowed": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "blocked_actions": [
+    "treating intake validator as operator approval",
+    "starting controlled execution from intake validator",
+    "writing Task Flow registry state",
+    "writing SQLite state",
+    "running worker execution from intake validator",
+    "invoking a model from intake validator"
+  ],
+  "rollback_path": "Discard this read-only intake validator artifact; it did not persist registry, SQLite, worker, model, approval, or execution state.",
+  "next_safe_task": "Add a read-only controlled executor intake coverage report before any approval-token or execution path."
+}

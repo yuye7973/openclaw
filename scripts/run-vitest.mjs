@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { resolveLocalVitestEnv } from "./lib/vitest-local-scheduling.mjs";
 import { spawnPnpmRunner } from "./pnpm-runner.mjs";
 import {
@@ -12,6 +13,11 @@ import {
 const TRUTHY_ENV_VALUES = new Set(["1", "true", "yes", "on"]);
 const SUPPRESSED_VITEST_STDERR_PATTERNS = ["[PLUGIN_TIMINGS] Warning:"];
 const require = createRequire(import.meta.url);
+const vitestWindowsNetUseExecGuardPath = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "lib",
+  "vitest-windows-net-use-exec-guard.cjs",
+);
 
 function isTruthyEnvValue(value) {
   return TRUTHY_ENV_VALUES.has(value?.trim().toLowerCase() ?? "");
@@ -22,12 +28,14 @@ function parsePositiveInt(value) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-export function resolveVitestNodeArgs(env = process.env) {
+export function resolveVitestNodeArgs(env = process.env, platform = process.platform) {
+  const preloadArgs =
+    platform === "win32" ? ["--require", vitestWindowsNetUseExecGuardPath] : [];
   if (isTruthyEnvValue(env.OPENCLAW_VITEST_ENABLE_MAGLEV)) {
-    return [];
+    return preloadArgs;
   }
 
-  return ["--no-maglev"];
+  return [...preloadArgs, "--no-maglev"];
 }
 
 export function resolveVitestCliEntry() {
@@ -82,19 +90,48 @@ export function shouldSuppressVitestStderrLine(line) {
   return SUPPRESSED_VITEST_STDERR_PATTERNS.some((pattern) => line.includes(pattern));
 }
 
-export function resolveDirectNodeVitestArgs(pnpmArgs) {
+export function resolveDirectNodeVitestArgs(pnpmArgs, platform = process.platform) {
+  if (platform === "win32") {
+    return null;
+  }
   return pnpmArgs[0] === "exec" && pnpmArgs[1] === "node" ? pnpmArgs.slice(2) : null;
 }
 
+function withDetachedFallback(spawnFactory, spawnParams) {
+  try {
+    return spawnFactory(spawnParams);
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? error.code : "UNKNOWN";
+    if (code === "EPERM") {
+      const canDisableDetach = spawnParams?.detached === true;
+      const canDowngradeStdio = Array.isArray(spawnParams?.stdio);
+      if (canDisableDetach || canDowngradeStdio) {
+        return spawnFactory({
+          ...spawnParams,
+          detached: canDisableDetach ? false : spawnParams?.detached,
+          stdio: canDowngradeStdio ? "inherit" : spawnParams?.stdio,
+        });
+      }
+    }
+    throw error;
+  }
+}
 function spawnVitestProcess({ pnpmArgs, spawnParams }) {
   const directNodeArgs = resolveDirectNodeVitestArgs(pnpmArgs);
   if (directNodeArgs) {
-    return spawn(process.execPath, directNodeArgs, spawnParams);
+    return withDetachedFallback(
+      (nextSpawnParams) => spawn(process.execPath, directNodeArgs, nextSpawnParams),
+      spawnParams,
+    );
   }
-  return spawnPnpmRunner({
-    pnpmArgs,
-    ...spawnParams,
-  });
+  return withDetachedFallback(
+    (nextSpawnParams) =>
+      spawnPnpmRunner({
+        pnpmArgs,
+        ...nextSpawnParams,
+      }),
+    spawnParams,
+  );
 }
 
 export function installVitestNoOutputWatchdog(params) {
@@ -107,6 +144,9 @@ export function installVitestNoOutputWatchdog(params) {
   const clearTimeoutFn = params.clearTimeoutFn ?? clearTimeout;
   const forceKillAfterMs = params.forceKillAfterMs ?? 5_000;
   const streams = params.streams?.filter(Boolean) ?? [];
+  if (streams.length === 0) {
+    return () => {};
+  }
   const label = params.label?.trim();
   const suffix = label ? ` (${label})` : "";
 

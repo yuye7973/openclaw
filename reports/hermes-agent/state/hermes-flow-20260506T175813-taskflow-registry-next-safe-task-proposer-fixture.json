@@ -1,0 +1,77 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_next_safe_task_proposer_fixture.v1",
+  "created_at": "2026-05-07T01:40:11.362Z",
+  "dry_run": true,
+  "read_only": true,
+  "fixture_only": true,
+  "source_real_writer_activation_final_safety_summary_coverage_report": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-real-writer-activation-final-safety-summary-coverage-report.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "fixture_ready",
+  "operation": "create",
+  "validation_status": "pass",
+  "failures": [],
+  "model_decision_boundary": {
+    "may_reference_hermes_model_decision": true,
+    "model_decision_reference_allowed": true,
+    "model_invocation_allowed": false,
+    "model_invoked": false,
+    "decision_source": "deterministic_guardrail_fixture"
+  },
+  "proposed_next_task": {
+    "id": "taskflow-registry-next-safe-task-proposer-coverage",
+    "title": "Add a read-only next safe task proposer fixture coverage report",
+    "mode": "read_only_coverage",
+    "reason": "Prove the deterministic next-safe-task proposer is complete before any future writer, registry, SQLite, worker, or model path can be considered.",
+    "required_inputs": [
+      "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-real-writer-activation-final-safety-summary-coverage-report.json"
+    ],
+    "required_validation": [
+      "proposal fixture schema is complete",
+      "Hermes model decision may be referenced but not invoked",
+      "operator approval remains false",
+      "registry writes remain disabled",
+      "SQLite writes remain disabled",
+      "worker execution remains disabled",
+      "model invocation remains disabled"
+    ],
+    "prohibited_actions": [
+      "creating the real Task Flow registry writer",
+      "writing Task Flow registry state",
+      "writing SQLite state",
+      "executing worker tasks",
+      "invoking Hermes or OpenClaw models automatically",
+      "treating this fixture as operator approval"
+    ],
+    "expected_artifact": "taskflow-registry-next-safe-task-proposer-fixture-coverage-report",
+    "proposal_fingerprint": "2da66db657190c7c536d849e3c579ee19e2996a91fa01384f3004798fa990cf3"
+  },
+  "preconditions": {
+    "final_safety_summary_coverage_green": true,
+    "final_safety_summary_ready": true,
+    "release_checklist_coverage_green": true,
+    "operator_handoff_packet_coverage_green": true,
+    "approval_challenge_boundary_green": true,
+    "rollback_precondition_reference_green": true,
+    "disabled_commit_strategy_confirmation_green": true,
+    "operator_approval_boundary_locked": true,
+    "all_writes_disabled": true
+  },
+  "operator_approved": false,
+  "real_writer_allowed": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "blocked_actions": [
+    "Task Flow registry write",
+    "SQLite registry mutation",
+    "worker execution from next safe task proposer fixture",
+    "model invocation during next safe task proposer fixture",
+    "creating the real Task Flow registry writer from next safe task proposer fixture",
+    "treating this proposer fixture as operator approval",
+    "automatic promotion from proposer fixture to executable task"
+  ],
+  "rollback_path": "Discard this dry-run next safe task proposer fixture; it did not persist registry, SQLite, worker, model, or approval state.",
+  "next_safe_task": "Add a read-only next safe task proposer fixture coverage report without registry, SQLite, worker, or model execution."
+}

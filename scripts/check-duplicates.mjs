@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,6 +29,20 @@ const sourcePattern = "**/*.{ts,tsx,js,mjs,cjs}";
 const testPattern = "**/*.{test,e2e.test,live.test}.{ts,tsx,js,mjs,cjs}";
 // Keep local agent support trees and vendored snapshots classified but outside jscpd.
 const intentionallyUnscannedPrefixes = [".agents/", "vendor/"];
+
+const FALLBACK_IGNORED_DIRECTORIES = new Set([
+  ".artifacts",
+  ".corepack",
+  ".git",
+  ".npm-cache",
+  ".npm-global",
+  ".openclaw",
+  ".tmp",
+  "coverage",
+  "dist",
+  "dist-runtime",
+  "node_modules",
+]);
 
 const generatedIgnores = [
   "extensions/qa-matrix/src/shared/**",
@@ -94,12 +109,57 @@ function isCoveredByTargets(file) {
   });
 }
 
+function listSourceFilesFallback() {
+  const files = [];
+  const stack = [repoRoot];
+  while (stack.length > 0) {
+    const currentDir = stack.pop();
+    if (!currentDir) {
+      continue;
+    }
+    let entries = [];
+    try {
+      entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const absolutePath = path.join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        if (!FALLBACK_IGNORED_DIRECTORIES.has(entry.name)) {
+          stack.push(absolutePath);
+        }
+        continue;
+      }
+      if (!entry.isFile()) {
+        continue;
+      }
+      const relativePath = normalizeRepoPath(path.relative(repoRoot, absolutePath));
+      if (relativePath.startsWith("../")) {
+        continue;
+      }
+      if (!sourceExtensions.has(path.extname(relativePath))) {
+        continue;
+      }
+      if (intentionallyUnscannedPrefixes.some((prefix) => isUnderPrefix(relativePath, prefix))) {
+        continue;
+      }
+      files.push(relativePath);
+    }
+  }
+  return files.toSorted((left, right) => left.localeCompare(right));
+}
+
 function listTrackedSourceFiles() {
   const result = spawnSync("git", ["ls-files", "-z"], {
     cwd: repoRoot,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   });
+  const spawnErrorCode = result.error?.code;
+  if (spawnErrorCode && ["EPERM", "EACCES", "ENOENT"].includes(spawnErrorCode)) {
+    return listSourceFilesFallback();
+  }
   if (result.status !== 0) {
     throw new Error(result.stderr || "git ls-files failed");
   }

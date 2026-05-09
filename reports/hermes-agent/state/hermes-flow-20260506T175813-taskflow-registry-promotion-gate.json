@@ -1,0 +1,21 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_promotion_gate.v1",
+  "created_at": "2026-05-06T19:02:19.359Z",
+  "dry_run": true,
+  "staging_artifact": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-staging.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "manual_approval_required",
+  "registry_write_allowed": false,
+  "operator_approval_required": true,
+  "taskflow_registry_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "validation_status": "pass",
+  "failures": [],
+  "blocked_actions": [
+    "automatic Task Flow registry write",
+    "worker execution from Hermes staging",
+    "model invocation during registry promotion"
+  ],
+  "next_safe_task": "Implement a separate no-op registry writer adapter with tests before any real Task Flow registry write path."
+}

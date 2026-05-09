@@ -1,0 +1,52 @@
+{
+  "id": "hermes-agent",
+  "activation": {
+    "onStartup": false
+  },
+  "enabledByDefault": true,
+  "name": "Hermes Agent",
+  "description": "Guarded task-package bridge for OpenClaw planning, review, approval, and audit loops.",
+  "skills": ["./skills"],
+  "commandAliases": [
+    {
+      "name": "hermes",
+      "kind": "runtime-slash",
+      "cliCommand": "hermes"
+    }
+  ],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "audit": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "defaultDirectory": { "type": "string" }
+        }
+      },
+      "approval": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "defaultDirectory": { "type": "string" },
+          "ttlHours": { "type": "number" }
+        }
+      }
+    }
+  },
+  "uiHints": {
+    "audit.defaultDirectory": {
+      "label": "Audit Report Directory",
+      "help": "Workspace-relative directory for Hermes dry-run audit reports."
+    },
+    "approval.defaultDirectory": {
+      "label": "Approval Request Directory",
+      "help": "Workspace-relative directory for high-risk Hermes approval requests."
+    },
+    "approval.ttlHours": {
+      "label": "Approval TTL Hours",
+      "help": "Time window before a pending high-risk Hermes approval request should be treated as stale."
+    }
+  }
+}

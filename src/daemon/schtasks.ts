@@ -81,7 +81,18 @@ function sanitizeWindowsFilename(value: string): string {
 
 function resolveStartupEntryPath(env: GatewayServiceEnv): string {
   const taskName = resolveTaskName(env);
+  return path.join(resolveWindowsStartupDir(env), `${sanitizeWindowsFilename(taskName)}.vbs`);
+}
+
+function resolveLegacyStartupEntryPath(env: GatewayServiceEnv): string {
+  const taskName = resolveTaskName(env);
   return path.join(resolveWindowsStartupDir(env), `${sanitizeWindowsFilename(taskName)}.cmd`);
+}
+
+function resolveStartupEntryPaths(env: GatewayServiceEnv): string[] {
+  const primary = resolveStartupEntryPath(env);
+  const legacy = resolveLegacyStartupEntryPath(env);
+  return primary === legacy ? [primary] : [primary, legacy];
 }
 
 // `/TR` is parsed by schtasks itself, while the generated `gateway.cmd` line is parsed by cmd.exe.
@@ -277,18 +288,19 @@ function buildTaskScript({
   return `${lines.join("\r\n")}\r\n`;
 }
 
-function renderStartupLaunchCommand(scriptPath: string): string {
-  return `start "" /min cmd.exe /d /c ${quoteCmdScriptArg(scriptPath)}`;
+function escapeVbsString(value: string): string {
+  return value.replace(/"/g, '""');
 }
 
 function buildStartupLauncherScript(params: { description?: string; scriptPath: string }): string {
-  const lines = ["@echo off"];
+  const lines = ['Set shell = CreateObject("WScript.Shell")'];
   const trimmedDescription = params.description?.trim();
   if (trimmedDescription) {
     assertNoCmdLineBreak(trimmedDescription, "Startup launcher description");
-    lines.push(`rem ${trimmedDescription}`);
+    lines.unshift(`' ${trimmedDescription}`);
   }
-  lines.push(renderStartupLaunchCommand(params.scriptPath));
+  const commandLine = `cmd.exe /d /c ${quoteCmdScriptArg(params.scriptPath)}`;
+  lines.push(`shell.Run "${escapeVbsString(commandLine)}", 0, False`);
   return `${lines.join("\r\n")}\r\n`;
 }
 
@@ -302,12 +314,15 @@ async function assertSchtasksAvailable() {
 }
 
 async function isStartupEntryInstalled(env: GatewayServiceEnv): Promise<boolean> {
-  try {
-    await fs.access(resolveStartupEntryPath(env));
-    return true;
-  } catch {
-    return false;
+  for (const startupEntryPath of resolveStartupEntryPaths(env)) {
+    try {
+      await fs.access(startupEntryPath);
+      return true;
+    } catch {
+      // continue
+    }
   }
+  return false;
 }
 
 async function isRegisteredScheduledTask(env: GatewayServiceEnv): Promise<boolean> {
@@ -855,6 +870,12 @@ async function activateScheduledTask(params: {
     if (shouldFallbackToStartupEntry({ code: create.code, detail })) {
       const startupEntryPath = resolveStartupEntryPath(params.env);
       await fs.mkdir(path.dirname(startupEntryPath), { recursive: true });
+      for (const legacyPath of resolveStartupEntryPaths(params.env)) {
+        if (legacyPath === startupEntryPath) {
+          continue;
+        }
+        await fs.unlink(legacyPath).catch(() => {});
+      }
       const launcher = buildStartupLauncherScript({
         description: taskDescription,
         scriptPath: params.scriptPath,
@@ -914,11 +935,14 @@ export async function uninstallScheduledTask({
     await execSchtasks(["/Delete", "/F", "/TN", taskName]);
   }
 
-  const startupEntryPath = resolveStartupEntryPath(env);
-  try {
-    await fs.unlink(startupEntryPath);
-    stdout.write(`${formatLine("Removed Windows login item", startupEntryPath)}\n`);
-  } catch {}
+  for (const startupEntryPath of resolveStartupEntryPaths(env)) {
+    try {
+      await fs.unlink(startupEntryPath);
+      stdout.write(`${formatLine("Removed Windows login item", startupEntryPath)}\n`);
+    } catch {
+      // continue cleanup
+    }
+  }
 
   const scriptPath = resolveTaskScriptPath(env);
   try {

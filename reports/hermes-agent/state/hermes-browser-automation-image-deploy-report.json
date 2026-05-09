@@ -1,0 +1,31 @@
+{
+  "schema": "openclaw.hermes.browser_automation_image_deploy_report.v1",
+  "created_at": "2026-05-08T08:51:48.751Z",
+  "source_image": "E:/LINE下載資料/S__31424548.jpg",
+  "repo_root": "D:/OpenClaw",
+  "status": "pass",
+  "dry_run": false,
+  "deployment": {
+    "doctor": "ok",
+    "profiles": [
+      "openclaw",
+      "user"
+    ],
+    "smoke_flow": [
+      "openclaw browser start --headless",
+      "openclaw browser open https://example.com --label hermes-demo",
+      "openclaw browser snapshot --target-id t2 --format aria --limit 120",
+      "openclaw browser stop"
+    ]
+  },
+  "evidence": {
+    "open_result": "opened: https://example.com/; tab: t2",
+    "snapshot_result": "RootWebArea 'Example Domain' captured"
+  },
+  "risk": [
+    "cloud provider mode needs valid provider endpoint/credentials",
+    "manual blockers (login/2FA/captcha/permission) still require operator action"
+  ],
+  "rollback_path": "No persistent runtime config changed in this run; stop browser and close demo tab if needed.",
+  "next_safe_task": "Create provider-specific profile templates (Browserbase/Firecrawl/Camofox) and validate each with doctor+snapshot."
+}

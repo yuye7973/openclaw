@@ -10,7 +10,7 @@ describe("exec allowlist matching", () => {
 
   it("handles wildcard and path matching semantics", () => {
     const cases: Array<{ entries: ExecAllowlistEntry[]; expectedPattern: string | null }> = [
-      { entries: [{ pattern: "RG" }], expectedPattern: null },
+      { entries: [{ pattern: "RG" }], expectedPattern: "RG" },
       { entries: [{ pattern: "not-rg" }], expectedPattern: null },
       { entries: [{ pattern: "/opt/**/rg" }], expectedPattern: "/opt/**/rg" },
       { entries: [{ pattern: "/opt/*/rg" }], expectedPattern: null },

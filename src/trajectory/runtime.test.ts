@@ -41,7 +41,7 @@ describe("trajectory runtime", () => {
         env: { OPENCLAW_TRAJECTORY_DIR: "/tmp/traces" },
         sessionId: "../evil/session",
       }),
-    ).toBe("/tmp/traces/___evil_session.jsonl");
+    ).toBe(path.resolve("/tmp/traces/___evil_session.jsonl"));
   });
 
   it("records sanitized runtime events by default", () => {

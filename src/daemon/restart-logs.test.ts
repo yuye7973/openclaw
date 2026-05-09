@@ -1,8 +1,10 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   GATEWAY_RESTART_LOG_FILENAME,
   renderCmdRestartLogSetup,
   renderPosixRestartLogSetup,
+  shellEscapeRestartLogValue,
   resolveGatewayLogPaths,
   resolveGatewayRestartLogPath,
 } from "./restart-logs.js";
@@ -13,15 +15,14 @@ describe("restart log conventions", () => {
       HOME: "/Users/test",
       OPENCLAW_PROFILE: "work",
     };
+    const expectedLogDir = path.join("/Users/test", ".openclaw-work", "logs");
 
     expect(resolveGatewayLogPaths(env)).toEqual({
-      logDir: "/Users/test/.openclaw-work/logs",
-      stdoutPath: "/Users/test/.openclaw-work/logs/gateway.log",
-      stderrPath: "/Users/test/.openclaw-work/logs/gateway.err.log",
+      logDir: expectedLogDir,
+      stdoutPath: path.join(expectedLogDir, "gateway.log"),
+      stderrPath: path.join(expectedLogDir, "gateway.err.log"),
     });
-    expect(resolveGatewayRestartLogPath(env)).toBe(
-      `/Users/test/.openclaw-work/logs/${GATEWAY_RESTART_LOG_FILENAME}`,
-    );
+    expect(resolveGatewayRestartLogPath(env)).toBe(path.join(expectedLogDir, GATEWAY_RESTART_LOG_FILENAME));
   });
 
   it("honors OPENCLAW_STATE_DIR for restart attempts", () => {
@@ -31,7 +32,7 @@ describe("restart log conventions", () => {
     };
 
     expect(resolveGatewayRestartLogPath(env)).toBe(
-      `/tmp/openclaw-state/logs/${GATEWAY_RESTART_LOG_FILENAME}`,
+      path.join(path.resolve("/tmp/openclaw-state"), "logs", GATEWAY_RESTART_LOG_FILENAME),
     );
   });
 
@@ -39,21 +40,27 @@ describe("restart log conventions", () => {
     const setup = renderPosixRestartLogSetup({
       HOME: "/Users/test's",
     });
+    const logPath = resolveGatewayRestartLogPath({ HOME: "/Users/test's" });
+    const logDir = path.dirname(logPath);
+    const escapedLogDir = shellEscapeRestartLogValue(logDir);
+    const escapedLogPath = shellEscapeRestartLogValue(logPath);
 
     expect(setup).toContain(
-      "if mkdir -p '/Users/test'\\''s/.openclaw/logs' 2>/dev/null && : >>'/Users/test'\\''s/.openclaw/logs/gateway-restart.log' 2>/dev/null; then",
+      `if mkdir -p '${escapedLogDir}' 2>/dev/null && : >>'${escapedLogPath}' 2>/dev/null; then`,
     );
-    expect(setup).toContain("exec >>'/Users/test'\\''s/.openclaw/logs/gateway-restart.log' 2>&1");
+    expect(setup).toContain(`exec >>'${escapedLogPath}' 2>&1`);
   });
 
   it("renders CMD log setup with quoted paths", () => {
     const setup = renderCmdRestartLogSetup({
       USERPROFILE: "C:\\Users\\Test User",
     });
+    const expectedLogDir = path.join("C:\\Users\\Test User", ".openclaw", "logs");
+    const expectedLogPath = path.join(expectedLogDir, GATEWAY_RESTART_LOG_FILENAME);
 
-    expect(setup.quotedLogPath).toBe('"C:\\Users\\Test User/.openclaw/logs/gateway-restart.log"');
+    expect(setup.quotedLogPath).toBe(`"${expectedLogPath}"`);
     expect(setup.lines).toContain(
-      'if not exist "C:\\Users\\Test User/.openclaw/logs" mkdir "C:\\Users\\Test User/.openclaw/logs" >nul 2>&1',
+      `if not exist "${expectedLogDir}" mkdir "${expectedLogDir}" >nul 2>&1`,
     );
   });
 });

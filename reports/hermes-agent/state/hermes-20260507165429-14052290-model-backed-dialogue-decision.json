@@ -1,0 +1,144 @@
+{
+  "schema": "openclaw.hermes.model_decision.v1",
+  "trace_id": "hermes-20260507165429-14052290",
+  "created_at": "2026-05-07T16:54:29.900Z",
+  "dry_run": true,
+  "model_invoked": true,
+  "agent_id": "dev",
+  "provider": "ollama",
+  "model": "qwen3:14b",
+  "request": "Start OpenClaw Hermes model dialogue. Return JSON with summary, action_plan, validation_commands, risk_notes. risk_notes must include: registry writes disabled; SQLite writes disabled; worker execution disabled; live actions disabled.",
+  "risk_class": "local_write",
+  "approval_required": false,
+  "parsed_model_json": true,
+  "decision": {
+    "summary": "Dry-run initiated: No changes executed, boundaries preserved.",
+    "action_plan": [
+      "Inspect task_package for risk_class 'local_write'",
+      "Validate forbidden_actions compliance",
+      "Generate no-op report with trace_id"
+    ],
+    "validation_commands": [
+      "git diff --check",
+      "pnpm test HermesModelDialogue",
+      "pnpm check:changed"
+    ],
+    "risk_notes": [
+      "registry writes disabled",
+      "SQLite writes disabled",
+      "worker execution disabled",
+      "live actions disabled"
+    ]
+  },
+  "model_text": "{\n  \"summary\": \"Dry-run initiated: No changes executed, boundaries preserved.\",\n  \"action_plan\": [\n    \"Inspect task_package for risk_class 'local_write'\",\n    \"Validate forbidden_actions compliance\",\n    \"Generate no-op report with trace_id\"\n  ],\n  \"validation_commands\": [\n    \"git diff --check\",\n    \"pnpm test HermesModelDialogue\",\n    \"pnpm check:changed\"\n  ],\n  \"risk_notes\": [\n    \"registry writes disabled\",\n    \"SQLite writes disabled\",\n    \"worker execution disabled\",\n    \"live actions disabled\"\n  ]\n}",
+  "task_package": {
+    "task_name": "Hermes task package: Start OpenClaw Hermes model dialogue. Return JSON with summary, action_plan, val",
+    "task_goal": "Start OpenClaw Hermes model dialogue. Return JSON with summary, action_plan, validation_commands, risk_notes. risk_notes must include: registry writes disabled; SQLite writes disabled; worker execution disabled; live actions disabled.",
+    "execution_scope": [
+      "Stay inside the selected OpenClaw workspace.",
+      "Prefer the smallest safe change that can be validated.",
+      "Produce a dry-run package before any execution."
+    ],
+    "files_to_create_or_modify": [
+      "To be resolved by the receiving OpenClaw worker after scoped inspection."
+    ],
+    "concrete_steps": [
+      "Classify the request and confirm the risk boundary.",
+      "Inspect only directly relevant files and docs.",
+      "Create the smallest bounded change or no-op report.",
+      "Run targeted validation for the touched surface.",
+      "Return changed files, validation results, risk, rollback path, and next safe task."
+    ],
+    "forbidden_actions": [
+      "Do not create a second OpenClaw project.",
+      "Do not use global Codex skills as the formal runtime source.",
+      "Do not run real trading, payment, credential, deployment, or external-write actions.",
+      "Do not modify unrelated active automation trees."
+    ],
+    "validation_commands": [
+      "git diff --check",
+      "pnpm test <targeted-file-or-filter>",
+      "pnpm check:changed"
+    ],
+    "success_criteria": [
+      "No parallel OpenClaw project is created.",
+      "No real external write, trading action, credential write, or deployment is performed.",
+      "The task package can be audited by trace_id.",
+      "The package is safe for local dry-run review."
+    ],
+    "report_format": [
+      "Core result",
+      "Files changed",
+      "Validation result",
+      "Remaining blockers",
+      "Risk",
+      "Rollback path",
+      "Next safe task"
+    ],
+    "assumptions": [
+      "OpenClaw repo root has already been verified.",
+      "Missing details are resolved through local inspection, not external side effects."
+    ],
+    "risk_class": "local_write",
+    "approval_required": false
+  },
+  "envelope": {
+    "protocol": "openclaw.hermes.agent_message.v1",
+    "trace_id": "hermes-20260507165429-14052290",
+    "source_agent": "hermes-agent",
+    "target_agent": "openclaw-runtime",
+    "intent": "task_package_review",
+    "approval_required": false,
+    "task_package": {
+      "task_name": "Hermes task package: Start OpenClaw Hermes model dialogue. Return JSON with summary, action_plan, val",
+      "task_goal": "Start OpenClaw Hermes model dialogue. Return JSON with summary, action_plan, validation_commands, risk_notes. risk_notes must include: registry writes disabled; SQLite writes disabled; worker execution disabled; live actions disabled.",
+      "execution_scope": [
+        "Stay inside the selected OpenClaw workspace.",
+        "Prefer the smallest safe change that can be validated.",
+        "Produce a dry-run package before any execution."
+      ],
+      "files_to_create_or_modify": [
+        "To be resolved by the receiving OpenClaw worker after scoped inspection."
+      ],
+      "concrete_steps": [
+        "Classify the request and confirm the risk boundary.",
+        "Inspect only directly relevant files and docs.",
+        "Create the smallest bounded change or no-op report.",
+        "Run targeted validation for the touched surface.",
+        "Return changed files, validation results, risk, rollback path, and next safe task."
+      ],
+      "forbidden_actions": [
+        "Do not create a second OpenClaw project.",
+        "Do not use global Codex skills as the formal runtime source.",
+        "Do not run real trading, payment, credential, deployment, or external-write actions.",
+        "Do not modify unrelated active automation trees."
+      ],
+      "validation_commands": [
+        "git diff --check",
+        "pnpm test <targeted-file-or-filter>",
+        "pnpm check:changed"
+      ],
+      "success_criteria": [
+        "No parallel OpenClaw project is created.",
+        "No real external write, trading action, credential write, or deployment is performed.",
+        "The task package can be audited by trace_id.",
+        "The package is safe for local dry-run review."
+      ],
+      "report_format": [
+        "Core result",
+        "Files changed",
+        "Validation result",
+        "Remaining blockers",
+        "Risk",
+        "Rollback path",
+        "Next safe task"
+      ],
+      "assumptions": [
+        "OpenClaw repo root has already been verified.",
+        "Missing details are resolved through local inspection, not external side effects."
+      ],
+      "risk_class": "local_write",
+      "approval_required": false
+    }
+  }
+}

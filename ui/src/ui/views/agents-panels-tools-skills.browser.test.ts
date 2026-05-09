@@ -1,6 +1,7 @@
 import { render } from "lit";
 import { describe, expect, it } from "vitest";
-import { renderAgentTools } from "./agents-panels-tools-skills.ts";
+import type { SkillStatusEntry } from "../types.ts";
+import { renderAgentSkills, renderAgentTools } from "./agents-panels-tools-skills.ts";
 
 function createBaseParams(overrides: Partial<Parameters<typeof renderAgentTools>[0]> = {}) {
   return {
@@ -23,6 +24,58 @@ function createBaseParams(overrides: Partial<Parameters<typeof renderAgentTools>
     runtimeSessionMatchesSelectedAgent: true,
     onProfileChange: () => undefined,
     onOverridesChange: () => undefined,
+    onConfigReload: () => undefined,
+    onConfigSave: () => undefined,
+    ...overrides,
+  };
+}
+
+function createSkillEntry(overrides: Partial<SkillStatusEntry> = {}): SkillStatusEntry {
+  return {
+    name: "clawsweeper",
+    description: "Inspect ClawSweeper reports",
+    source: "agents-skills-project",
+    filePath: "/workspace/.agents/skills/clawsweeper/SKILL.md",
+    baseDir: "/workspace/.agents/skills/clawsweeper",
+    skillKey: "clawsweeper",
+    always: false,
+    disabled: false,
+    blockedByAllowlist: false,
+    blockedByAgentFilter: false,
+    eligible: true,
+    modelVisible: true,
+    userInvocable: true,
+    commandVisible: true,
+    requirements: { bins: [], env: [], config: [], os: [] },
+    missing: { bins: [], env: [], config: [], os: [] },
+    configChecks: [],
+    install: [],
+    ...overrides,
+  };
+}
+
+function createSkillsParams(overrides: Partial<Parameters<typeof renderAgentSkills>[0]> = {}) {
+  return {
+    agentId: "main",
+    report: {
+      workspaceDir: "/workspace",
+      managedSkillsDir: "/managed",
+      agentId: "main",
+      skills: [],
+    },
+    loading: false,
+    error: null,
+    activeAgentId: "main",
+    configForm: { agents: { list: [{ id: "main" }] } } as Record<string, unknown>,
+    configLoading: false,
+    configSaving: false,
+    configDirty: false,
+    filter: "",
+    onFilterChange: () => undefined,
+    onRefresh: () => undefined,
+    onToggle: () => undefined,
+    onClear: () => undefined,
+    onDisableAll: () => undefined,
     onConfigReload: () => undefined,
     onConfigSave: () => undefined,
     ...overrides,
@@ -338,5 +391,52 @@ describe("agents tools panel (browser)", () => {
     expect(tool.open).toBe(true);
 
     container.remove();
+  });
+
+  it("renders skill-declared architecture agents", async () => {
+    const container = document.createElement("div");
+    render(
+      renderAgentSkills(
+        createSkillsParams({
+          report: {
+            workspaceDir: "/workspace",
+            managedSkillsDir: "/managed",
+            agentId: "main",
+            skills: [
+              createSkillEntry({
+                agentInterface: {
+                  displayName: "ClawSweeper",
+                  shortDescription: "Inspect ClawSweeper reports",
+                  defaultPrompt: "Review recent ClawSweeper reports.",
+                  filePath: "/workspace/.agents/skills/clawsweeper/agents/openai.yaml",
+                },
+              }),
+              createSkillEntry({
+                name: "tengyi-401-pdf-autonomous-trainer",
+                description: "Execute the controlled Tengyi 401 PDF autonomous training workflow.",
+                source: "openclaw-workspace",
+                filePath: "/workspace/skills/tengyi-401-pdf-autonomous-trainer/SKILL.md",
+                baseDir: "/workspace/skills/tengyi-401-pdf-autonomous-trainer",
+                skillKey: "tengyi-401-pdf-autonomous-trainer",
+                eligible: true,
+                modelVisible: true,
+                userInvocable: true,
+                commandVisible: true,
+              }),
+            ],
+          },
+        }),
+      ),
+      container,
+    );
+    await Promise.resolve();
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("Architecture Agents");
+    expect(text).toContain("ClawSweeper");
+    expect(text).toContain("architecture agent");
+    expect(text).toContain("Review recent ClawSweeper reports.");
+    expect(text).toContain("tengyi-401-pdf-autonomous-trainer");
+    expect(text).toContain("Execute the controlled Tengyi 401 PDF autonomous training workflow.");
   });
 });

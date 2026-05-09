@@ -1,0 +1,99 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_staging.v1",
+  "created_at": "2026-05-06T18:42:41.068Z",
+  "dry_run": true,
+  "status": "staged",
+  "flow_id": "hermes-flow-20260506T175813",
+  "source_artifact": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-skeleton.json",
+  "validation": {
+    "schema": "openclaw.hermes.taskflow_skeleton.validation.v1",
+    "created_at": "2026-05-06T18:42:41.068Z",
+    "path": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-skeleton.json",
+    "status": "pass",
+    "failures": [],
+    "ready_for_registry": true,
+    "flow_id": "hermes-flow-20260506T175813"
+  },
+  "registry_mode": "staging_dry_run",
+  "taskflow_registry_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "sync_mode": "managed",
+  "steps": [
+    {
+      "id": "hermes_planner",
+      "order": 1,
+      "status": "pending",
+      "owner": "hermes_planner",
+      "command": "openclaw hermes plan <request>",
+      "expected_report": "task_package",
+      "blocks_parallel_model_runs": true
+    },
+    {
+      "id": "worker_coder",
+      "order": 2,
+      "status": "pending",
+      "owner": "worker_coder",
+      "command": "OpenClaw worker applies the bounded task package",
+      "expected_report": "worker_report",
+      "blocks_parallel_model_runs": true
+    },
+    {
+      "id": "verifier",
+      "order": 3,
+      "status": "pending",
+      "owner": "verifier",
+      "command": "openclaw hermes promote --trace-id <trace_id> --validate <command>",
+      "expected_report": "promotion_report",
+      "blocks_parallel_model_runs": true
+    },
+    {
+      "id": "memory_summarizer",
+      "order": 4,
+      "status": "pending",
+      "owner": "memory_summarizer",
+      "command": "openclaw hermes learn --trace-id <trace_id> --status <success|failure>",
+      "expected_report": "learning_state",
+      "blocks_parallel_model_runs": true
+    }
+  ],
+  "gates": [
+    {
+      "after": "hermes_planner",
+      "require": [
+        "task_package",
+        "risk_class",
+        "validation_commands",
+        "rollback_path"
+      ]
+    },
+    {
+      "after": "worker_coder",
+      "require": [
+        "changed_files",
+        "validation_result",
+        "rollback_path"
+      ]
+    },
+    {
+      "after": "verifier",
+      "require": [
+        "promotion_report",
+        "promote_or_rollback_decision"
+      ]
+    },
+    {
+      "after": "memory_summarizer",
+      "require": [
+        "learning_state",
+        "next_safe_task_context"
+      ]
+    }
+  ],
+  "promotion_blockers": [
+    "Task Flow registry write is disabled for this staging artifact.",
+    "Worker execution is disabled for this staging artifact.",
+    "Model invocation is disabled for this staging artifact."
+  ],
+  "next_safe_task": "Add an explicit registry-write promotion gate before writing this flow into the Task Flow registry."
+}

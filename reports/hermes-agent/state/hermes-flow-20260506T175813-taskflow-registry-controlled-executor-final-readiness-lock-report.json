@@ -1,0 +1,42 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_controlled_executor_final_readiness_lock_report.v1",
+  "created_at": "2026-05-07T05:30:03.308Z",
+  "dry_run": true,
+  "read_only": true,
+  "source_controlled_executor_approval_preflight_coverage_report": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-controlled-executor-approval-preflight-coverage-report.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "lock_pass",
+  "operation": "create",
+  "validation_status": "pass",
+  "failures": [],
+  "lock": {
+    "approval_preflight_coverage_green": true,
+    "approval_preflight_green": true,
+    "intake_release_summary_green": true,
+    "intake_coverage_green": true,
+    "intake_preconditions_still_complete": true,
+    "intake_boundary_still_locked": true,
+    "operator_approval_still_false": true,
+    "execution_started_still_false": true,
+    "all_writes_disabled": true,
+    "model_invocation_disabled": true,
+    "coverage_ratio": 1
+  },
+  "operator_approved": false,
+  "real_writer_allowed": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "blocked_actions": [
+    "using controlled executor final readiness lock report as execution approval",
+    "starting controlled execution from controlled executor final readiness lock report",
+    "writing Task Flow registry state",
+    "writing SQLite state",
+    "running worker execution from controlled executor final readiness lock report",
+    "invoking a model from controlled executor final readiness lock report"
+  ],
+  "rollback_path": "Discard this read-only controlled executor final readiness lock report; it did not persist registry, SQLite, worker, model, approval, or execution state.",
+  "next_safe_task": "Add a read-only controlled executor final readiness lock coverage report before any approval-token or execution path."
+}

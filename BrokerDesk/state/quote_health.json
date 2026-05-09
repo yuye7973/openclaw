@@ -1,0 +1,54 @@
+{
+  "generatedAt": "2026-05-07T11:30:30.1294396+08:00",
+  "overallReady": false,
+  "overallRule": "群益需收到實際報價事件；商品宇宙需大於 0；元大只作參考資料",
+  "contains1115": false,
+  "active1115": false,
+  "historical1115": false,
+  "currentBlockingCode": "",
+  "blockers": [
+    "群益帳號未設定",
+    "群益 COM DLL 未就緒",
+    "群益未收到 SKQuoteLib.OnNotifyQuote(LONG) / OnNotifyTicks(LONG) / OnNotifyBest5(LONG) 報價事件",
+    "商品宇宙為 0"
+  ]
+,
+  "functionRows": 0,
+  "marketRows": 0,
+  "quoteUniverseCount": 0,
+  "quoteUniversePath": "D:\\OpenClaw\\BrokerDesk\\cache\\quote_universe.tsv",
+  "quoteUniverseExists": false,
+  "capital": {
+    "accountSet": false,
+    "dllReady": false,
+    "quoteEventConfirmed": false,
+    "officialQuoteEventSources": ["SKQuoteLib.OnNotifyQuote", "SKQuoteLib.OnNotifyTicks", "SKQuoteLib.OnNotifyBest5", "SKQuoteLib.OnNotifyQuoteLONG", "SKQuoteLib.OnNotifyTicksLONG", "SKQuoteLib.OnNotifyBest5LONG"],
+    "lastQuoteEventSource": "N/A",
+    "lastQuoteAction": "quote-status",
+    "lastQuoteMessage": "尚未完成群益報價事件確認",
+    "lastQuoteAt": "N/A",
+    "market": "",
+    "stock": ""
+  },
+  "yuanta": {
+    "referenceOnly": true,
+    "runtimeEnabled": false,
+    "splitFromRuntime": true,
+    "participatesInQuoteGate": false,
+    "accountSet": false,
+    "dllReady": false,
+    "quoteCommandReady": false,
+    "quoteEventConfirmed": false,
+    "officialQuoteEventCodes": ["98.10.70.10", "210.10.70.11", "210.10.40.10"],
+    "lastQuoteEventCode": "",
+    "lastQuoteEventSource": "N/A",
+    "confirmationNote": "元大已切割為 reference-only：只保留官方文件與範例資料，不參與登入、報價、背景連線或 OpenClaw quote gate。",
+    "lastQuoteAction": "quote-status",
+    "lastQuoteMessage": "reference only; no background login",
+    "lastQuoteAt": "N/A",
+    "referencePath": "D:\\OpenClaw\\references\\yuanta",
+    "environment": "",
+    "market": "",
+    "stock": ""
+  }
+}

@@ -7,6 +7,10 @@ import baseConfig, {
   resolveLocalVitestScheduling,
 } from "../../vitest.config.ts";
 
+function toPortablePath(value: unknown): string {
+  return String(value).replace(/\\/gu, "/");
+}
+
 describe("resolveLocalVitestMaxWorkers", () => {
   it("uses a moderate local worker cap on larger hosts", () => {
     expect(
@@ -204,12 +208,14 @@ describe("base vitest config", () => {
 
   it("keeps the base setup file minimal", () => {
     expect(baseConfig.test?.setupFiles).toHaveLength(1);
-    expect(baseConfig.test?.setupFiles?.[0]).toMatch(/(?:^|\/)test\/setup\.ts$/u);
+    expect(toPortablePath(baseConfig.test?.setupFiles?.[0])).toMatch(/(?:^|\/)test\/setup\.ts$/u);
   });
 
   it("keeps the base runner non-isolated by default", () => {
     expect(baseConfig.test?.isolate).toBe(false);
-    expect(baseConfig.test?.runner).toMatch(/(?:^|\/)test\/non-isolated-runner\.ts$/u);
+    expect(toPortablePath(baseConfig.test?.runner)).toMatch(
+      /(?:^|\/)test\/non-isolated-runner\.ts$/u,
+    );
   });
 });
 

@@ -1,0 +1,162 @@
+{
+  "schema": "openclaw.hermes.taskflow_skeleton.v1",
+  "created_at": "2026-05-06T17:52:35.079Z",
+  "dry_run": true,
+  "flow_id": "hermes-flow-20260506T175235",
+  "sync_mode": "managed",
+  "status": "planned",
+  "deployment_plan": {
+    "schema": "openclaw.hermes.deployment_plan.v1",
+    "created_at": "2026-05-06T17:52:35.079Z",
+    "dry_run": true,
+    "mode": "sequential_handoff",
+    "request": "connect Hermes and OpenClaw as a controlled self-improvement loop",
+    "current_model": "ollama/qwen3:14b",
+    "roles": [
+      {
+        "id": "hermes_planner",
+        "owns": [
+          "task packaging",
+          "risk classification",
+          "next task selection"
+        ],
+        "first_model": "ollama/qwen3:14b",
+        "future_model_class": "strong reasoning model",
+        "entrypoint": "openclaw hermes plan / openclaw hermes decide",
+        "report": "task_package"
+      },
+      {
+        "id": "worker_coder",
+        "owns": [
+          "bounded patches",
+          "targeted validation",
+          "changed-file report"
+        ],
+        "first_model": "ollama/qwen3:14b",
+        "future_model_class": "coding-specialized local model",
+        "entrypoint": "OpenClaw worker task flow step",
+        "report": "worker_report"
+      },
+      {
+        "id": "verifier",
+        "owns": [
+          "validation review",
+          "rollback decision",
+          "promotion decision"
+        ],
+        "first_model": "ollama/qwen3:14b",
+        "future_model_class": "conservative verification model",
+        "entrypoint": "openclaw hermes promote",
+        "report": "promotion_report"
+      },
+      {
+        "id": "memory_summarizer",
+        "owns": [
+          "success patterns",
+          "failure patterns",
+          "compact next-task context"
+        ],
+        "first_model": "ollama/qwen3:14b",
+        "future_model_class": "small summary model",
+        "entrypoint": "openclaw hermes learn",
+        "report": "learning_state"
+      }
+    ],
+    "handoff_order": [
+      "hermes_planner",
+      "worker_coder",
+      "verifier",
+      "memory_summarizer"
+    ],
+    "resource_policy": [
+      "Run one local model role at a time.",
+      "Do not parallelize large local model turns.",
+      "Prefer deterministic validation before model judgment.",
+      "Stop the loop when model availability or validation state is unknown."
+    ],
+    "promotion_policy": [
+      "Promote only after targeted validation passes.",
+      "Record failed validation as a failure pattern.",
+      "Require rollback when validation fails.",
+      "Create the next task only after verifier and memory reports exist."
+    ],
+    "forbidden_actions": [
+      "Do not create a second OpenClaw project.",
+      "Do not enable real trading, payment, credential writes, deployment, or external writes.",
+      "Do not let Hermes patch files during a worker turn.",
+      "Do not silently switch models when the requested role model is unavailable."
+    ],
+    "next_safe_task": "Wire the sequential handoff plan into Task Flow as a dry-run skeleton before assigning separate models."
+  },
+  "steps": [
+    {
+      "id": "hermes_planner",
+      "order": 1,
+      "status": "pending",
+      "owner": "hermes_planner",
+      "command": "openclaw hermes plan <request>",
+      "expected_report": "task_package",
+      "blocks_parallel_model_runs": true
+    },
+    {
+      "id": "worker_coder",
+      "order": 2,
+      "status": "pending",
+      "owner": "worker_coder",
+      "command": "OpenClaw worker applies the bounded task package",
+      "expected_report": "worker_report",
+      "blocks_parallel_model_runs": true
+    },
+    {
+      "id": "verifier",
+      "order": 3,
+      "status": "pending",
+      "owner": "verifier",
+      "command": "openclaw hermes promote --trace-id <trace_id> --validate <command>",
+      "expected_report": "promotion_report",
+      "blocks_parallel_model_runs": true
+    },
+    {
+      "id": "memory_summarizer",
+      "order": 4,
+      "status": "pending",
+      "owner": "memory_summarizer",
+      "command": "openclaw hermes learn --trace-id <trace_id> --status <success|failure>",
+      "expected_report": "learning_state",
+      "blocks_parallel_model_runs": true
+    }
+  ],
+  "gates": [
+    {
+      "after": "hermes_planner",
+      "require": [
+        "task_package",
+        "risk_class",
+        "validation_commands",
+        "rollback_path"
+      ]
+    },
+    {
+      "after": "worker_coder",
+      "require": [
+        "changed_files",
+        "validation_result",
+        "rollback_path"
+      ]
+    },
+    {
+      "after": "verifier",
+      "require": [
+        "promotion_report",
+        "promote_or_rollback_decision"
+      ]
+    },
+    {
+      "after": "memory_summarizer",
+      "require": [
+        "learning_state",
+        "next_safe_task_context"
+      ]
+    }
+  ]
+}

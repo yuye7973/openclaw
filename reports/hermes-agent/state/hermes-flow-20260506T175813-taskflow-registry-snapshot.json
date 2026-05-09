@@ -1,0 +1,20 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_snapshot.v1",
+  "created_at": "2026-05-06T20:06:20.679Z",
+  "dry_run": true,
+  "read_only": true,
+  "source": "openclaw_tasks_flow_list_json",
+  "input_artifact": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-list.json",
+  "flow_id_hint": "hermes-flow-20260506T175813",
+  "status": "snapshot_ready",
+  "sqlite_read": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "validation_status": "pass",
+  "failures": [],
+  "count": 0,
+  "flows": [],
+  "next_safe_task": "Feed this snapshot artifact into read-taskflow-registry-dry-run before any registry writer review."
+}

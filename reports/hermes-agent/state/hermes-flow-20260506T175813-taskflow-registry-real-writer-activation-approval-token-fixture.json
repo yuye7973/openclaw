@@ -1,0 +1,49 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_real_writer_activation_approval_token_fixture.v1",
+  "created_at": "2026-05-06T23:20:27.658Z",
+  "dry_run": true,
+  "read_only": true,
+  "token_fixture_only": true,
+  "source_real_writer_final_readiness_lock_report": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-real-writer-final-readiness-lock-report.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "fixture_ready",
+  "operation": "create",
+  "validation_status": "pass",
+  "failures": [],
+  "approval_token_boundary": {
+    "challenge": "APPROVE HERMES REAL WRITER hermes-flow-20260506T175813 CREATE",
+    "fingerprint": "ea4472008f51d9346510949bde3e403e724b5d1c3f329772b8f93758f783b304",
+    "fingerprint_algorithm": "sha256",
+    "raw_token_persisted": false,
+    "operator_approved": false,
+    "approval_required_before_real_writer": true,
+    "token_storage_policy": "fingerprint_only"
+  },
+  "preconditions": {
+    "final_readiness_lock_green": true,
+    "promotion_preflight_coverage_green": true,
+    "api_contract_coverage_green": true,
+    "operator_approval_boundary_locked": true,
+    "rollback_precondition_present": true,
+    "disabled_commit_strategy_locked": true,
+    "all_writes_disabled": true
+  },
+  "operator_approved": false,
+  "real_writer_allowed": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "blocked_actions": [
+    "Task Flow registry write",
+    "SQLite registry mutation",
+    "worker execution from activation approval token fixture",
+    "model invocation during activation approval token fixture",
+    "persisting raw approval token",
+    "treating fingerprint fixture as operator approval",
+    "creating the real Task Flow registry writer from approval token fixture"
+  ],
+  "rollback_path": "Discard this dry-run approval token fixture; it stored only a deterministic fingerprint boundary and no registry, SQLite, worker, or model state.",
+  "next_safe_task": "Add a read-only activation approval token coverage report before any real Task Flow registry writer implementation is allowed."
+}

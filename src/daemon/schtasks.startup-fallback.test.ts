@@ -79,7 +79,7 @@ function resolveStartupEntryPath(env: Record<string, string>) {
     "Start Menu",
     "Programs",
     "Startup",
-    "OpenClaw Gateway.cmd",
+    "OpenClaw Gateway.vbs",
   );
 }
 
@@ -208,7 +208,8 @@ describe("Windows startup fallback", () => {
       const startupEntryPath = resolveStartupEntryPath(env);
       const startupScript = await fs.readFile(startupEntryPath, "utf8");
       expect(result.scriptPath).toBe(resolveTaskScriptPath(env));
-      expect(startupScript).toContain('start "" /min cmd.exe /d /c');
+      expect(startupScript).toContain('Set shell = CreateObject("WScript.Shell")');
+      expect(startupScript).toContain("shell.Run");
       expect(startupScript).toContain("gateway.cmd");
       expectStartupFallbackSpawn();
       expect(childUnref).toHaveBeenCalled();

@@ -92,6 +92,8 @@ Have the workflow reject or mark stale items before summarization. The LLM step 
 
 For reusable team or community workflows, package the CLI, `.lobster` files, and any setup notes as a skill or plugin and publish it through [ClawHub](/tools/clawhub). Keep workflow-specific guardrails in that package unless the plugin API is missing a needed generic capability.
 
+When a workflow is meant to recur inside OpenClaw, expose it as a named skill first, then wrap it with a Task Flow only if it needs durable state, waits, or multi-step orchestration. That keeps the operator entrypoint close to the skill surface while Task Flow owns the long-lived execution record.
+
 ## Sync modes
 
 ### Managed mode

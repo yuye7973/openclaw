@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -19,6 +20,19 @@ const WEAK_RANDOM_SAME_LINE_PATTERN =
 const PATH_JOIN_CALL_PATTERN = /path\s*\.\s*join\s*\(/u;
 const OS_TMPDIR_CALL_PATTERN = /os\s*\.\s*tmpdir\s*\(/u;
 const FILE_READ_CONCURRENCY = 24;
+const FALLBACK_IGNORED_DIRECTORIES = new Set([
+  ".artifacts",
+  ".corepack",
+  ".git",
+  ".npm-cache",
+  ".npm-global",
+  ".openclaw",
+  ".tmp",
+  "coverage",
+  "dist",
+  "dist-runtime",
+  "node_modules",
+]);
 const DEFAULT_GUARDRAIL_SKIP_PATTERNS = [
   /\.test\.tsx?$/,
   /\.test-helpers\.tsx?$/,
@@ -207,17 +221,67 @@ function hasDynamicTmpdirJoin(source: string): boolean {
   return false;
 }
 
+function listRuntimeSourceFilesFallback(repoRoot: string): string[] {
+  const output: string[] = [];
+  const stack = [path.join(repoRoot, "src"), path.join(repoRoot, "extensions")];
+
+  while (stack.length > 0) {
+    const currentDir = stack.pop();
+    if (!currentDir) {
+      continue;
+    }
+
+    let entries: fsSync.Dirent[] = [];
+    try {
+      entries = fsSync.readdirSync(currentDir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      const absolutePath = path.join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        if (!FALLBACK_IGNORED_DIRECTORIES.has(entry.name)) {
+          stack.push(absolutePath);
+        }
+        continue;
+      }
+      if (!entry.isFile()) {
+        continue;
+      }
+      const relativePath = path.relative(repoRoot, absolutePath);
+      if (!(relativePath.endsWith(".ts") || relativePath.endsWith(".tsx"))) {
+        continue;
+      }
+      if (shouldSkipGuardrailRuntimeSource(relativePath)) {
+        continue;
+      }
+      output.push(absolutePath);
+    }
+  }
+
+  return output.toSorted((left, right) => left.localeCompare(right));
+}
+
 function listTrackedRuntimeSourceFiles(repoRoot: string): string[] {
-  const stdout = execFileSync("git", ["-C", repoRoot, "ls-files", "--", "src", "extensions"], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "inherit"],
-  });
-  return stdout
-    .split(/\r?\n/u)
-    .filter(Boolean)
-    .filter((relativePath) => relativePath.endsWith(".ts") || relativePath.endsWith(".tsx"))
-    .filter((relativePath) => !shouldSkipGuardrailRuntimeSource(relativePath))
-    .map((relativePath) => path.join(repoRoot, relativePath));
+  try {
+    const stdout = execFileSync("git", ["-C", repoRoot, "ls-files", "--", "src", "extensions"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    return stdout
+      .split(/\r?\n/u)
+      .filter(Boolean)
+      .filter((relativePath) => relativePath.endsWith(".ts") || relativePath.endsWith(".tsx"))
+      .filter((relativePath) => !shouldSkipGuardrailRuntimeSource(relativePath))
+      .map((relativePath) => path.join(repoRoot, relativePath));
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? error.code : "UNKNOWN";
+    if (code === "EPERM" || code === "EACCES" || code === "ENOENT") {
+      return listRuntimeSourceFilesFallback(repoRoot);
+    }
+    throw error;
+  }
 }
 
 async function readRuntimeSourceFiles(

@@ -1,0 +1,105 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_task_dialoguer_handoff_package.v1",
+  "created_at": "2026-05-07T03:00:00.000Z",
+  "dry_run": true,
+  "read_only": true,
+  "source_task_dialoguer_fixture_coverage_report": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-task-dialoguer-fixture-coverage-report.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "handoff_ready",
+  "operation": "create",
+  "validation_status": "pass",
+  "failures": [],
+  "dialogue_to_execution_loop": {
+    "dialogue_coverage_green": true,
+    "handoff_to_controlled_executor": true,
+    "execution_started": false,
+    "executor_boundary": "openclaw_controlled_executor",
+    "phases": [
+      {
+        "order": 1,
+        "name": "dialogue",
+        "owner": "hermes",
+        "purpose": "Hermes proposes the next safe task and reasons with OpenClaw guardrails.",
+        "exit_criteria": "Dialogue fixture coverage is green and remains dialogue-only."
+      },
+      {
+        "order": 2,
+        "name": "package",
+        "owner": "openclaw",
+        "purpose": "OpenClaw converts the dialogue into a controlled execution request.",
+        "exit_criteria": "The handoff package is ready and execution has not started."
+      },
+      {
+        "order": 3,
+        "name": "approval",
+        "owner": "operator",
+        "purpose": "The operator approves or rejects the controlled execution request.",
+        "exit_criteria": "A separate approval token path exists before any execution."
+      },
+      {
+        "order": 4,
+        "name": "controlled_execution",
+        "owner": "openclaw",
+        "purpose": "A separate OpenClaw executor runs the approved task within its boundary.",
+        "exit_criteria": "Executor reports changed files, validation output, and rollback state."
+      },
+      {
+        "order": 5,
+        "name": "verification",
+        "owner": "openclaw",
+        "purpose": "Verifier checks the executor result against the requested task and safety gates.",
+        "exit_criteria": "Validation passes or rollback is selected."
+      },
+      {
+        "order": 6,
+        "name": "feedback",
+        "owner": "hermes",
+        "purpose": "Hermes records the result and proposes the next safe task.",
+        "exit_criteria": "Next safe task is available for a new dialogue loop."
+      }
+    ]
+  },
+  "execution_request": {
+    "task_id": "taskflow-registry-task-dialoguer-release-summary",
+    "task_title": "Create a read-only release summary for the task dialoguer loop",
+    "requested_executor": "openclaw_controlled_executor",
+    "execution_mode": "pending_operator_approval",
+    "execution_started": false,
+    "allowed_after": [
+      "task_dialoguer_fixture_coverage_report.status == coverage_pass",
+      "operator_approved == true through a separate approval token path",
+      "controlled executor boundary is selected"
+    ],
+    "validation_commands": [
+      "pnpm exec oxlint extensions/hermes-agent/src/deployment-plan.ts extensions/hermes-agent/src/cli.ts extensions/hermes-agent/src/lifecycle.test.ts",
+      "pnpm test extensions/hermes-agent/src/lifecycle.test.ts",
+      "pnpm autonomous:inventory:check",
+      "pnpm check",
+      "pnpm build",
+      "git diff --check"
+    ]
+  },
+  "loop_closure": {
+    "verifier_required": true,
+    "feedback_required": true,
+    "learning_update_required": true,
+    "next_safe_task_required": true
+  },
+  "operator_approved": false,
+  "real_writer_allowed": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "blocked_actions": [
+    "starting controlled execution from the handoff package",
+    "treating handoff package as operator approval",
+    "writing Task Flow registry state",
+    "writing SQLite state",
+    "running worker execution without a separate executor",
+    "invoking a model from the handoff package"
+  ],
+  "rollback_path": "Discard this handoff package; it did not persist registry, SQLite, worker, model, approval, or execution state.",
+  "next_safe_task": "Add a controlled executor intake validator that consumes this handoff package without starting execution."
+}

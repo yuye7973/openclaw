@@ -66,6 +66,25 @@ const WHATSAPP_DTS_INPUTS = [
 ];
 const WHATSAPP_DTS_STAMP = "dist/plugin-sdk/extensions/whatsapp/.boundary-dts.stamp";
 const WHATSAPP_DTS_REQUIRED_OUTPUTS = ["dist/plugin-sdk/extensions/whatsapp/api.d.ts"];
+function isPermissionError(error) {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error.code === "EPERM" || error.code === "EACCES"),
+  );
+}
+
+function safeStatSync(entryPath) {
+  try {
+    return fs.statSync(entryPath);
+  } catch (error) {
+    if (isPermissionError(error)) {
+      return null;
+    }
+    throw error;
+  }
+}
 const ENTRY_SHIMS_INPUTS = [
   "scripts/write-plugin-sdk-entry-dts.ts",
   "scripts/lib/plugin-sdk-entrypoints.json",
@@ -98,7 +117,10 @@ function collectNewestMtime(paths, params = {}) {
     if (!fs.existsSync(entryPath)) {
       return;
     }
-    const stats = fs.statSync(entryPath);
+    const stats = safeStatSync(entryPath);
+    if (!stats) {
+      return;
+    }
     if (stats.isDirectory()) {
       for (const child of fs.readdirSync(entryPath)) {
         visit(path.join(entryPath, child));
@@ -127,12 +149,15 @@ function collectOldestMtime(paths, params = {}) {
     if (!fs.existsSync(absolutePath)) {
       return null;
     }
-    oldestMtimeMs = Math.min(oldestMtimeMs, fs.statSync(absolutePath).mtimeMs);
+    const stats = safeStatSync(absolutePath);
+    if (!stats) {
+      return null;
+    }
+    oldestMtimeMs = Math.min(oldestMtimeMs, stats.mtimeMs);
   }
 
   return Number.isFinite(oldestMtimeMs) ? oldestMtimeMs : null;
 }
-
 export function isArtifactSetFresh(params) {
   const newestInputMtimeMs = collectNewestMtime(params.inputPaths, {
     rootDir: params.rootDir,
@@ -142,6 +167,21 @@ export function isArtifactSetFresh(params) {
   return oldestOutputMtimeMs !== null && oldestOutputMtimeMs >= newestInputMtimeMs;
 }
 
+function tryRemoveIncrementalState(relativePath) {
+  const absolutePath = resolve(repoRoot, relativePath);
+  try {
+    fs.rmSync(absolutePath, { force: true });
+    return true;
+  } catch (error) {
+    if (isPermissionError(error)) {
+      process.stderr.write(
+        `[prepare-extension-package-boundary-artifacts] permission denied while removing incremental state ${absolutePath}; continuing.\n`,
+      );
+      return false;
+    }
+    throw error;
+  }
+}
 function hasMissingOutput(paths) {
   return paths.some((relativePath) => !fs.existsSync(resolve(repoRoot, relativePath)));
 }
@@ -150,7 +190,7 @@ function removeIncrementalStateForMissingOutput(params) {
   if (!hasMissingOutput(params.outputPaths)) {
     return;
   }
-  fs.rmSync(resolve(repoRoot, params.tsBuildInfoPath), { force: true });
+  tryRemoveIncrementalState(params.tsBuildInfoPath);
 }
 
 function writeStampFile(relativePath) {
@@ -186,6 +226,14 @@ export function createPrefixedOutputWriter(label, target) {
   };
 }
 
+function isSpawnPermissionError(error) {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error.code === "EPERM" || error.code === "EACCES"),
+  );
+}
 function abortSiblingSteps(abortController) {
   if (abortController && !abortController.signal.aborted) {
     abortController.abort();
@@ -195,12 +243,25 @@ function abortSiblingSteps(abortController) {
 function runNodeStep(label, args, timeoutMs, params = {}) {
   const abortController = params.abortController;
   return new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn(process.execPath, args, {
-      cwd: repoRoot,
-      env: params.env ? { ...process.env, ...params.env } : process.env,
-      signal: abortController?.signal,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    let child;
+    try {
+      child = spawn(process.execPath, args, {
+        cwd: repoRoot,
+        env: params.env ? { ...process.env, ...params.env } : process.env,
+        signal: abortController?.signal,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (error) {
+      if (isLocalCheckEnabled(params.env ?? process.env) && isSpawnPermissionError(error)) {
+        process.stderr.write(
+          `[${label}] local spawn permission denied (${error.code}); skipping this preparation step.\n`,
+        );
+        resolvePromise();
+        return;
+      }
+      rejectPromise(new Error(`${label} failed to start: ${error.message}`));
+      return;
+    }
 
     let settled = false;
     const stdoutWriter = createPrefixedOutputWriter(label, process.stdout);
@@ -235,6 +296,13 @@ function runNodeStep(label, args, timeoutMs, params = {}) {
       stderrWriter.flush();
       if (error.name === "AbortError" && abortController?.signal.aborted) {
         rejectPromise(new Error(`${label} canceled after sibling failure`));
+        return;
+      }
+      if (isLocalCheckEnabled(params.env ?? process.env) && isSpawnPermissionError(error)) {
+        process.stderr.write(
+          `[${label}] local spawn permission denied (${error.code}); skipping this preparation step.\n`,
+        );
+        resolvePromise();
         return;
       }
       abortSiblingSteps(abortController);

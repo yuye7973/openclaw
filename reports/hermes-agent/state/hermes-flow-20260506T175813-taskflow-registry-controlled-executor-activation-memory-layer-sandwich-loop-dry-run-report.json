@@ -1,0 +1,53 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_controlled_executor_activation_memory_layer_sandwich_loop_dry_run_report.v1",
+  "created_at": "2026-05-09T05:18:30.755Z",
+  "dry_run": true,
+  "read_only": true,
+  "source_controlled_executor_activation_memory_layer_sandwich_loop_report": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-controlled-executor-activation-memory-layer-sandwich-loop-report.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "closed_loop_complete",
+  "operation": "create",
+  "validation_status": "pass",
+  "failures": [],
+  "run": {
+    "run_mode": "dry_run_controlled_activation",
+    "started": true,
+    "completed": true,
+    "observe_phase_complete": true,
+    "retrieve_phase_complete": true,
+    "reason_phase_complete": true,
+    "validate_phase_complete": true,
+    "store_candidate_phase_blocked_until_approval": true,
+    "recall_phase_complete": true,
+    "compare_phase_complete": true,
+    "next_task_phase_complete": true,
+    "completion_ratio": 1
+  },
+  "sandwich_runtime": {
+    "top_guardrail_checked": true,
+    "middle_planner_memory_checked": true,
+    "bottom_verifier_recall_checked": true,
+    "model_invocation_reference_only": true,
+    "runtime_ratio": 1
+  },
+  "operator_approved": false,
+  "execution_started": false,
+  "real_writer_allowed": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "memory_write": false,
+  "blocked_actions": [
+    "using dry-run closed-loop report as operator approval",
+    "starting real controlled executor activation from dry-run closed-loop report",
+    "writing memory state before explicit approval",
+    "writing Task Flow registry state",
+    "writing SQLite state",
+    "running worker execution from dry-run closed-loop report",
+    "invoking a model from dry-run closed-loop report"
+  ],
+  "rollback_path": "Discard this dry-run closed-loop report; it did not persist memory, registry, SQLite, worker, model, approval, or execution state.",
+  "next_safe_task": "Add a read-only dry-run closed-loop run coverage report before enabling any approved memory write or model invocation path."
+}

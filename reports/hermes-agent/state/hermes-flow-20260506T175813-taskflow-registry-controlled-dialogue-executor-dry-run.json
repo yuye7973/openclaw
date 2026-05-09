@@ -1,0 +1,78 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_controlled_dialogue_executor_dry_run.v1",
+  "created_at": "2026-05-09T05:18:26.567Z",
+  "dry_run": true,
+  "read_only": true,
+  "source_task_dialoguer_status_summary_coverage_report": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-task-dialoguer-status-summary-coverage-report.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "dialogue_started",
+  "operation": "create",
+  "validation_status": "pass",
+  "failures": [],
+  "dialogue_started": true,
+  "execution_started": false,
+  "dialogue_session": {
+    "mode": "openclaw_hermes_controlled_dialogue_dry_run",
+    "openclaw_to_hermes_started": true,
+    "hermes_to_openclaw_started": true,
+    "turns": [
+      {
+        "speaker": "openclaw",
+        "intent": "open_controlled_dialogue",
+        "message": "OpenClaw starts a dry-run Hermes dialogue session from green task-dialoguer coverage.",
+        "output_contract": "Return bounded next-task reasoning without approval, registry writes, SQLite writes, worker execution, or model invocation."
+      },
+      {
+        "speaker": "hermes",
+        "intent": "recommend_next_safe_flow",
+        "message": "Hermes recommends moving from dialogue coverage into controlled executor intake coverage.",
+        "output_contract": "Keep the recommendation artifact-only and require operator approval before any real execution."
+      }
+    ],
+    "flow_steps": [
+      "OpenClaw reads the task-dialoguer status summary coverage artifact.",
+      "OpenClaw opens a deterministic dry-run dialogue session for Hermes.",
+      "Hermes returns a bounded recommendation using the existing coverage and handoff contracts.",
+      "OpenClaw records the recommended flow, guardrails, and next validation step as an artifact.",
+      "OpenClaw keeps real registry, SQLite, worker, and model paths disabled until approval."
+    ],
+    "optimization_steps": [
+      "Keep dialogue context scoped to the current flow id and source artifact.",
+      "Require coverage_ratio=1 before any controlled executor intake step.",
+      "Keep operator approval separate from generated dialogue or handoff artifacts.",
+      "Prefer read-only coverage, preflight, release-summary, and rollback artifacts before activation.",
+      "Keep model invocation reference-only until an explicit model-caller gate exists.",
+      "Write every run result as a rollbackable artifact under reports/hermes-agent/state."
+    ],
+    "guardrails": {
+      "approval_required": true,
+      "execution_start_allowed": false,
+      "registry_write_allowed": false,
+      "sqlite_write": false,
+      "worker_execution": false,
+      "model_invocation": false
+    },
+    "next_decision": {
+      "recommended_task": "Run controlled executor intake coverage after the intake validator is green.",
+      "risk_level": "low",
+      "prerequisite": "task-dialoguer status summary coverage must stay green with all write and model paths disabled"
+    }
+  },
+  "operator_approved": false,
+  "real_writer_allowed": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "blocked_actions": [
+    "treating controlled dialogue as operator approval",
+    "starting real execution from controlled dialogue",
+    "writing Task Flow registry state",
+    "writing SQLite state",
+    "running worker execution from controlled dialogue",
+    "invoking a model from controlled dialogue"
+  ],
+  "rollback_path": "Discard this dry-run controlled dialogue executor session artifact; it did not persist registry, SQLite, worker, model, approval, or execution state.",
+  "next_safe_task": "Run controlled executor intake coverage after the intake validator is green."
+}

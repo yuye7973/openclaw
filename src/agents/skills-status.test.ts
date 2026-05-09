@@ -1,9 +1,28 @@
-import { describe, expect, it } from "vitest";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { buildWorkspaceSkillStatus } from "./skills-status.js";
 import { createCanonicalFixtureSkill } from "./skills.test-helpers.js";
 import type { SkillEntry } from "./skills/types.js";
 
+const tempDirs: string[] = [];
+
+async function createTempDir(prefix: string) {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+}
+
 describe("buildWorkspaceSkillStatus", () => {
+  afterEach(async () => {
+    await Promise.all(
+      tempDirs
+        .splice(0)
+        .map((dir) => fs.rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 })),
+    );
+  });
+
   it("does not surface install options for OS-scoped skills on unsupported platforms", () => {
     if (process.platform === "win32") {
       // Keep this simple; win32 platform naming is already explicitly handled elsewhere.
@@ -97,6 +116,43 @@ describe("buildWorkspaceSkillStatus", () => {
     expect(skill?.modelVisible).toBe(false);
     expect(skill?.userInvocable).toBe(false);
     expect(skill?.commandVisible).toBe(false);
+  });
+
+  it("reports skill-declared agent interface metadata", async () => {
+    const baseDir = await createTempDir("openclaw-skill-agent-");
+    const interfacePath = path.join(baseDir, "agents", "openai.yaml");
+    await fs.mkdir(path.dirname(interfacePath), { recursive: true });
+    await fs.writeFile(
+      interfacePath,
+      [
+        "interface:",
+        '  display_name: "ClawSweeper"',
+        '  short_description: "Inspect ClawSweeper reports"',
+        '  default_prompt: "Review recent ClawSweeper reports."',
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const entry: SkillEntry = {
+      skill: createFixtureSkill({
+        name: "clawsweeper",
+        description: "test",
+        filePath: path.join(baseDir, "SKILL.md"),
+        baseDir,
+        source: "test",
+      }),
+      frontmatter: {},
+    };
+
+    const report = buildWorkspaceSkillStatus(baseDir, { entries: [entry] });
+
+    expect(report.skills[0]?.agentInterface).toEqual({
+      displayName: "ClawSweeper",
+      shortDescription: "Inspect ClawSweeper reports",
+      defaultPrompt: "Review recent ClawSweeper reports.",
+      filePath: interfacePath,
+    });
   });
 
   it("uses default-visible exposure semantics when older entries omit exposure fields", () => {

@@ -1,0 +1,94 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_real_writer_api_contract_fixture.v1",
+  "created_at": "2026-05-06T22:28:26.450Z",
+  "dry_run": true,
+  "fixture_mode": "real_writer_api_contract_dry_run",
+  "source_real_writer_implementation_plan_coverage_report": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-real-writer-implementation-plan-coverage-report.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "contract_ready",
+  "operation": "create",
+  "validation_status": "pass",
+  "failures": [],
+  "api_contract": {
+    "target": "task_flow_registry_writer",
+    "mode": "api_contract_only",
+    "input_schema": {
+      "required_artifacts": [
+        "final_writer_readiness_summary",
+        "real_writer_implementation_plan",
+        "real_writer_implementation_plan_coverage_report"
+      ],
+      "required_operator_inputs": [
+        "approval_token"
+      ],
+      "required_fields": [
+        "flow_id",
+        "operation",
+        "approval_token",
+        "rollback_contract_reference"
+      ],
+      "forbidden_fields": [
+        "raw_token_persistence",
+        "unreviewed_sqlite_commit",
+        "unreviewed_taskflow_registry_write"
+      ]
+    },
+    "output_schema": {
+      "would_write_record": [
+        "flow_id",
+        "operation",
+        "registry_target",
+        "approval_token_fingerprint",
+        "rollback_contract_reference"
+      ],
+      "audit_fields": [
+        "created_at",
+        "operator_approved",
+        "registry_write_allowed",
+        "taskflow_registry_write",
+        "sqlite_write"
+      ],
+      "disabled_commit_fields": [
+        "commit_strategy",
+        "taskflow_registry_write",
+        "sqlite_write",
+        "worker_execution",
+        "model_invoked"
+      ]
+    },
+    "approval_token_boundary": {
+      "required": true,
+      "accepted_format": "approve:<flow_id>:<operation>:taskflow-registry",
+      "validation_mode": "future_explicit_operator_artifact",
+      "stores_token_fingerprint_only": true,
+      "operator_approved": false
+    },
+    "rollback_precondition": {
+      "required": true,
+      "source": "rollback_contract_coverage_report",
+      "trigger": "manual_after_failed_validation",
+      "must_pass_before_commit": true
+    },
+    "commit_strategy": "disabled",
+    "taskflow_registry_write": false,
+    "sqlite_write": false,
+    "promotion_boundary": "This fixture only describes the future writer API contract. Another coverage report must pass before any writer code exists."
+  },
+  "operator_approved": false,
+  "real_writer_allowed": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "blocked_actions": [
+    "Task Flow registry write",
+    "SQLite registry mutation",
+    "worker execution from real writer API contract fixture",
+    "model invocation during real writer API contract fixture",
+    "creating the real Task Flow registry writer from API contract fixture",
+    "automatic promotion from API contract fixture to writer code"
+  ],
+  "rollback_path": "Discard this dry-run API contract fixture; it did not persist registry, SQLite, worker, or model state.",
+  "next_safe_task": "Add a read-only real writer API contract coverage report before writing any real Task Flow registry writer code."
+}

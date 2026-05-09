@@ -114,8 +114,9 @@ describe("resolveUpdatedGatewayRestartPort", () => {
 
 describe("resolvePostInstallDoctorEnv", () => {
   it("uses the managed service profile paths for post-install doctor", () => {
+    const invocationCwd = path.resolve("/srv/openclaw");
     const env = resolvePostInstallDoctorEnv({
-      invocationCwd: "/srv/openclaw",
+      invocationCwd,
       baseEnv: {
         PATH: "/bin",
         OPENCLAW_STATE_DIR: "/wrong/state",
@@ -131,9 +132,9 @@ describe("resolvePostInstallDoctorEnv", () => {
 
     expect(env.PATH).toBe("/bin");
     expect(env.NODE_DISABLE_COMPILE_CACHE).toBe("1");
-    expect(env.OPENCLAW_STATE_DIR).toBe(path.join("/srv/openclaw", "daemon-state"));
+    expect(env.OPENCLAW_STATE_DIR).toBe(path.join(invocationCwd, "daemon-state"));
     expect(env.OPENCLAW_CONFIG_PATH).toBe(
-      path.join("/srv/openclaw", "daemon-state", "openclaw.json"),
+      path.join(invocationCwd, "daemon-state", "openclaw.json"),
     );
     expect(env.OPENCLAW_PROFILE).toBe("work");
   });

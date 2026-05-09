@@ -692,11 +692,26 @@ export function renderAgentSkills(params: {
   const filtered = filter
     ? rawSkills.filter((skill) =>
         normalizeLowercaseStringOrEmpty(
-          [skill.name, skill.description, skill.source].join(" "),
+          [
+            skill.name,
+            skill.description,
+            skill.source,
+            skill.agentInterface?.displayName,
+            skill.agentInterface?.shortDescription,
+            skill.agentInterface?.defaultPrompt,
+          ].join(" "),
         ).includes(filter),
       )
     : rawSkills;
   const groups = groupSkills(filtered);
+  const architectureSkills = filtered.filter(
+    (
+      skill,
+    ): skill is SkillStatusEntry & {
+      agentInterface: NonNullable<SkillStatusEntry["agentInterface"]>;
+    } => Boolean(skill.agentInterface),
+  );
+  const architectureTotal = rawSkills.filter((skill) => Boolean(skill.agentInterface)).length;
   const enabledCount = usingAllowlist
     ? rawSkills.filter((skill) => allowSet.has(skill.name)).length
     : rawSkills.length;
@@ -791,6 +806,29 @@ export function renderAgentSkills(params: {
         ? html`<div class="callout danger" style="margin-top: 12px;">${params.error}</div>`
         : nothing}
 
+      ${architectureTotal > 0
+        ? html`
+            <div class="agent-skills-architecture" style="margin-top: 14px;">
+              <div class="label">Architecture Agents</div>
+              <div class="card-sub">
+                Skill-declared agent interfaces from <span class="mono">agents/openai.yaml</span>.
+                <span class="mono">${architectureSkills.length}/${architectureTotal}</span>
+              </div>
+              ${architectureSkills.length === 0
+                ? html`<div class="muted" style="margin-top: 10px">
+                    No architecture agents match the current filter.
+                  </div>`
+                : html`
+                    <div class="list skills-grid" style="margin-top: 10px;">
+                      ${architectureSkills.map((skill) =>
+                        renderArchitectureSkillAgent(skill.agentInterface, skill.name),
+                      )}
+                    </div>
+                  `}
+            </div>
+          `
+        : nothing}
+
       <div class="filters" style="margin-top: 14px;">
         <label class="field" style="flex: 1;">
           <span>Filter</span>
@@ -821,6 +859,31 @@ export function renderAgentSkills(params: {
             </div>
           `}
     </section>
+  `;
+}
+
+function renderArchitectureSkillAgent(
+  agentInterface: NonNullable<SkillStatusEntry["agentInterface"]>,
+  skillName: string,
+) {
+  return html`
+    <div class="list-item agent-skill-row">
+      <div class="list-main">
+        <div class="list-title">${agentInterface.displayName}</div>
+        <div class="list-sub">${agentInterface.shortDescription ?? "Skill-declared agent surface."}</div>
+        <div class="chip-row" style="margin-top: 6px;">
+          <span class="chip">architecture agent</span>
+          <span class="chip mono" translate="no">${skillName}</span>
+        </div>
+        ${agentInterface.defaultPrompt
+          ? html`
+              <div class="muted" style="margin-top: 6px;">
+                Default prompt: ${agentInterface.defaultPrompt}
+              </div>
+            `
+          : nothing}
+      </div>
+    </div>
   `;
 }
 

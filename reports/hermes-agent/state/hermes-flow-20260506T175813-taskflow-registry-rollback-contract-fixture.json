@@ -1,0 +1,40 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_rollback_contract_fixture.v1",
+  "created_at": "2026-05-06T21:40:55.724Z",
+  "dry_run": true,
+  "fixture_mode": "rollback_contract_dry_run",
+  "source_promotion_preflight_report": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-promotion-preflight-report.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "rollback_ready",
+  "operation": "create",
+  "validation_status": "pass",
+  "failures": [],
+  "rollback_contract": {
+    "flow_id": "hermes-flow-20260506T175813",
+    "registry_target": "task_flow_registry",
+    "original_operation": "create",
+    "rollback_operation": "delete_created_flow",
+    "rollback_trigger": "manual_after_failed_validation",
+    "commit_strategy": "disabled",
+    "taskflow_registry_write": false,
+    "sqlite_write": false,
+    "requires_operator_review": true,
+    "restore_source": "none_create_would_delete",
+    "rollback_path": "Discard the dry-run created flow proposal; no registry or SQLite state was written."
+  },
+  "operator_approved": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "blocked_actions": [
+    "Task Flow registry write",
+    "SQLite registry mutation",
+    "worker execution from rollback contract fixture",
+    "model invocation during rollback contract fixture",
+    "automatic promotion from rollback contract fixture to real writer"
+  ],
+  "rollback_path": "Discard this dry-run rollback contract fixture; it did not persist registry, SQLite, worker, or model state.",
+  "next_safe_task": "Add a read-only rollback contract coverage report before any real Task Flow registry writer exists."
+}

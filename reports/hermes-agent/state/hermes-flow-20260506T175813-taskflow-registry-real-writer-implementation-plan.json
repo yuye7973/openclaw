@@ -1,0 +1,112 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_real_writer_implementation_plan.v1",
+  "created_at": "2026-05-06T22:13:56.189Z",
+  "dry_run": true,
+  "read_only": true,
+  "plan_only": true,
+  "source_final_writer_readiness_summary": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-final-writer-readiness-summary.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "plan_ready",
+  "operation": "create",
+  "validation_status": "pass",
+  "failures": [],
+  "readiness_inherited": {
+    "writer_contract_coverage_green": true,
+    "promotion_preflight_green": true,
+    "rollback_contract_coverage_green": true,
+    "all_writes_disabled": true,
+    "real_writer_allowed": false
+  },
+  "implementation_plan": {
+    "target": "task_flow_registry_writer",
+    "mode": "dry_run_plan_only",
+    "phases": [
+      "Define the writer API shape behind an explicit operator-approved promotion gate.",
+      "Implement the writer in a separate future patch with default-disabled registry and SQLite commits.",
+      "Require rollback contract coverage and targeted writer tests before any real write path can be enabled.",
+      "Promote only through a later guarded artifact that proves manual approval, rollback, and validation state."
+    ],
+    "required_entrypoints": [
+      "openclaw hermes plan-taskflow-registry-real-writer-implementation <final-writer-readiness-summary>",
+      "future: openclaw hermes write-taskflow-registry-real --approval-token <token> --dry-run-first"
+    ],
+    "required_guardrails": [
+      "registry_write_allowed defaults to false",
+      "taskflow_registry_write defaults to false",
+      "sqlite_write defaults to false",
+      "worker_execution defaults to false",
+      "model_invoked defaults to false",
+      "operator_approved must remain false until a future explicit approval artifact is validated",
+      "rollback contract coverage must remain green before any future writer code can be promoted"
+    ],
+    "required_validation": [
+      "node --check scripts/openclaw-autonomous-inventory.mjs",
+      "pnpm autonomous:inventory:check",
+      "pnpm exec oxlint extensions/hermes-agent/src/deployment-plan.ts extensions/hermes-agent/src/cli.ts extensions/hermes-agent/src/lifecycle.test.ts",
+      "strict TypeScript check for Hermes deployment plan and lifecycle tests",
+      "artifact assertion that registry_write_allowed, taskflow_registry_write, sqlite_write, worker_execution, and model_invoked stay false"
+    ],
+    "promotion_boundary": "This artifact is a plan only. A future patch must add another read-only coverage report before any writer implementation exists."
+  },
+  "guardrail_checklist": [
+    {
+      "id": "consume_final_writer_readiness_summary",
+      "label": "Consume a green final writer readiness summary before planning any real writer code.",
+      "required": true,
+      "passed": true
+    },
+    {
+      "id": "registry_writes_disabled",
+      "label": "Keep Task Flow registry writes disabled in the plan artifact.",
+      "required": true,
+      "passed": true
+    },
+    {
+      "id": "sqlite_writes_disabled",
+      "label": "Keep SQLite writes disabled in the plan artifact.",
+      "required": true,
+      "passed": true
+    },
+    {
+      "id": "worker_execution_disabled",
+      "label": "Do not execute workers from the plan artifact.",
+      "required": true,
+      "passed": true
+    },
+    {
+      "id": "model_invocation_disabled",
+      "label": "Do not invoke models from the plan artifact.",
+      "required": true,
+      "passed": true
+    },
+    {
+      "id": "operator_review_required",
+      "label": "Require a future explicit operator review before any real writer implementation can be promoted.",
+      "required": true,
+      "passed": true
+    },
+    {
+      "id": "rollback_contract_required",
+      "label": "Keep rollback contract coverage as a mandatory precondition for any future writer code.",
+      "required": true,
+      "passed": true
+    }
+  ],
+  "operator_approved": false,
+  "real_writer_allowed": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "blocked_actions": [
+    "Task Flow registry write",
+    "SQLite registry mutation",
+    "worker execution from real writer implementation plan",
+    "model invocation during real writer implementation plan",
+    "creating the real Task Flow registry writer in this step",
+    "automatic promotion from implementation plan to writer code"
+  ],
+  "rollback_path": "Discard this dry-run real writer implementation plan; it did not persist registry, SQLite, worker, or model state.",
+  "next_safe_task": "Add a read-only real writer implementation plan coverage report before writing any real Task Flow registry writer code."
+}

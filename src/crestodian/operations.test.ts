@@ -480,6 +480,7 @@ describe("parseCrestodianOperation", () => {
     vi.stubEnv("OPENCLAW_STATE_DIR", tempDir);
     vi.stubEnv("OPENAI_API_KEY", "test-key");
     const { runtime, lines } = createCrestodianTestRuntime();
+    const resolvedWorkspace = path.resolve("/tmp/work");
 
     const plan = await executeCrestodianOperation(
       { kind: "setup", workspace: "/tmp/work" },
@@ -501,7 +502,7 @@ describe("parseCrestodianOperation", () => {
     expect(mockConfig.currentConfig()).toMatchObject({
       agents: {
         defaults: {
-          workspace: "/tmp/work",
+          workspace: resolvedWorkspace,
           model: { primary: "openai/gpt-5.5" },
         },
       },
@@ -513,7 +514,7 @@ describe("parseCrestodianOperation", () => {
       summary: "Bootstrapped setup with openai/gpt-5.5",
       details: {
         rescue: true,
-        workspace: "/tmp/work",
+        workspace: resolvedWorkspace,
         model: "openai/gpt-5.5",
         modelSource: "OPENAI_API_KEY",
       },

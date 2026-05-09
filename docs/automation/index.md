@@ -127,6 +127,7 @@ See [Heartbeat](/gateway/heartbeat).
 - [Inferred Commitments](/concepts/commitments) — memory-like follow-up check-ins
 - [Background Tasks](/automation/tasks) — task ledger for all detached work
 - [Task Flow](/automation/taskflow) — durable multi-step flow orchestration
+- [Model Role Plan](/automation/model-role-plan) — role-based model assignment for stable Hermes and worker loops
 - [Hooks](/automation/hooks) — event-driven lifecycle scripts
 - [Plugin hooks](/plugins/hooks) — in-process tool, prompt, message, and lifecycle hooks
 - [Standing Orders](/automation/standing-orders) — persistent agent instructions

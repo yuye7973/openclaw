@@ -1,0 +1,39 @@
+{
+  "generatedAt": "2026-05-07T11:30:30.1334392+08:00",
+  "mode": "quote-status",
+  "loginAttempted": false,
+  "status": "missing-background-status",
+  "overallReady": false,
+  "brokerActionRequired": false,
+  "currentBlockingCode": "",
+  "contains1115": false,
+  "active1115": false,
+  "historical1115": false,
+  "nextActionOwner": "quote-status",
+  "nextAction": "尚無背景報價狀態；先執行 run-capital-readiness.bat 做不登入檢查，再決定是否執行背景報價。",
+  "quoteUniverseCount": 0,
+  "commands": {
+    "showQuoteStatus": "run-quote-status.bat",
+    "openClawQuoteBridge": "run-openclaw-quote-bridge.bat",
+    "capitalReadiness": "run-capital-readiness.bat",
+    "capitalSupportBundle": "run-capital-support-bundle.bat",
+    "backgroundOnce": "run-background-quotes-once.bat"
+  },
+  "files": {
+    "quoteStatus": "D:\\OpenClaw\\BrokerDesk\\state\\quote_status.json",
+    "backgroundQuoteStatus": "D:\\OpenClaw\\BrokerDesk\\state\\background_quotes_status.json",
+    "backgroundQuoteStatusExists": false,
+    "quoteHealth": "D:\\OpenClaw\\BrokerDesk\\state\\quote_health.json",
+    "quoteHealthExists": false,
+    "capitalReadiness": "D:\\OpenClaw\\BrokerDesk\\state\\capital_readiness.json",
+    "capitalReadinessExists": false,
+    "capitalLoginGuard": "D:\\OpenClaw\\BrokerDesk\\state\\capital_login_guard.json",
+    "capitalLoginGuardExists": false,
+    "capitalLatestQuoteEvent": "D:\\OpenClaw\\BrokerDesk\\state\\capital_latest_quote_event.json",
+    "capitalLatestQuoteEventExists": false,
+    "capitalQuoteEvents": "D:\\OpenClaw\\BrokerDesk\\state\\capital_quote_events.jsonl",
+    "capitalQuoteEventsExists": false,
+    "quoteUniverse": "D:\\OpenClaw\\BrokerDesk\\cache\\quote_universe.tsv",
+    "quoteUniverseExists": false
+  }
+}

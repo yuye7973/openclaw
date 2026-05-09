@@ -1,0 +1,60 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_real_writer_final_readiness_lock_report.v1",
+  "created_at": "2026-05-06T23:10:57.515Z",
+  "dry_run": true,
+  "read_only": true,
+  "source_real_writer_promotion_preflight_coverage_report": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-real-writer-promotion-preflight-coverage-report.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "lock_pass",
+  "operation": "create",
+  "validation_status": "pass",
+  "failures": [],
+  "lock": {
+    "required_fields_checked": [
+      "source_real_writer_promotion_preflight_report",
+      "coverage.promotion_preflight_green",
+      "coverage.api_contract_coverage_green",
+      "coverage.operator_approval_boundary_locked",
+      "coverage.rollback_precondition_present",
+      "coverage.disabled_commit_strategy_locked",
+      "coverage.coverage_ratio",
+      "next_safe_task"
+    ],
+    "safety_flags_checked": [
+      "dry_run",
+      "read_only",
+      "operator_approved",
+      "real_writer_allowed",
+      "registry_write_allowed",
+      "taskflow_registry_write",
+      "sqlite_write",
+      "worker_execution",
+      "model_invoked",
+      "coverage.all_writes_disabled"
+    ],
+    "promotion_preflight_coverage_green": true,
+    "api_contract_coverage_green": true,
+    "operator_approval_boundary_locked": true,
+    "rollback_precondition_present": true,
+    "disabled_commit_strategy_locked": true,
+    "all_writes_disabled": true,
+    "lock_ratio": 1
+  },
+  "operator_approved": false,
+  "real_writer_allowed": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "blocked_actions": [
+    "Task Flow registry write",
+    "SQLite registry mutation",
+    "worker execution from real writer final readiness lock report",
+    "model invocation during real writer final readiness lock report",
+    "creating the real Task Flow registry writer from final readiness lock",
+    "automatic promotion from final readiness lock to writer code"
+  ],
+  "rollback_path": "Discard this read-only final readiness lock report; it did not persist registry, SQLite, worker, or model state.",
+  "next_safe_task": "Add a dry-run real writer activation approval token fixture before any real Task Flow registry writer implementation is allowed."
+}

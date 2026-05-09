@@ -152,6 +152,7 @@ describe("entry compile cache", () => {
       ["/repo/openclaw/dist/entry.js", "status"],
       {
         stdio: "inherit",
+        windowsHide: process.platform === "win32",
         env: { NODE_DISABLE_COMPILE_CACHE: "1" },
       },
     );

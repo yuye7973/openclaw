@@ -1,0 +1,35 @@
+{
+  "schema": "openclaw.capital.paper-microstructure-strategy.v1",
+  "strategyName": "capital-paper-microstructure-probe",
+  "mode": "paper",
+  "enabled": true,
+  "allowLiveTrading": false,
+  "writeBrokerOrders": false,
+  "symbol": "TX00AM",
+  "marketCode": "TXF",
+  "targetStockNo": "TX00AM",
+  "targetStockNos": [
+    "TX00AM",
+    "TX00",
+    "TXFR1"
+  ],
+  "quoteAliases": [
+    "TX00AM",
+    "TX00",
+    "TXFR1",
+    "TXF"
+  ],
+  "targetStockName": "台指近",
+  "quantity": 1,
+  "maxSpreadTicks": 40,
+  "tickSize": 1,
+  "intentTtlMs": 750,
+  "signalPolicy": "passive_bid_probe",
+  "requirePositiveBidAsk": true,
+  "learning": {
+    "status": "candidate",
+    "minReadyCyclesForPaper": 20,
+    "blockAfterConsecutiveReadinessBlocks": 20,
+    "promoteLiveAutomatically": false
+  }
+}

@@ -1776,6 +1776,7 @@ async function continuePostCoreUpdateInFreshProcess(params: {
   try {
     const child = spawn(resolveNodeRunner(), argv, {
       stdio: "inherit",
+      windowsHide: process.platform === "win32",
       env: {
         ...stripGatewayServiceMarkerEnv(disableUpdatedPackageCompileCacheEnv(process.env)),
         [POST_CORE_UPDATE_ENV]: "1",

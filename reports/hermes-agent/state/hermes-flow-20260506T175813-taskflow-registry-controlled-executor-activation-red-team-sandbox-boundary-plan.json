@@ -1,0 +1,73 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_controlled_executor_activation_red_team_sandbox_boundary_plan.v1",
+  "created_at": "2026-05-07T11:59:07.630Z",
+  "dry_run": true,
+  "read_only": true,
+  "source_controlled_executor_activation_godmode_safety_lock_coverage_report": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-controlled-executor-activation-godmode-safety-lock-coverage-report.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "plan_ready",
+  "operation": "create",
+  "validation_status": "pass",
+  "failures": [],
+  "boundary": {
+    "plan_mode": "red_team_only_sandbox_boundary",
+    "godmode_coverage_pass": true,
+    "isolation_required": true,
+    "approval_gate_required": true,
+    "rollback_path_required": true,
+    "validation_checklist_complete": true,
+    "godmode_activation_disabled": true,
+    "auto_jailbreak_disabled": true,
+    "hermes_config_write_disabled": true,
+    "hermes_prefill_write_disabled": true,
+    "registry_write_disabled": true,
+    "sqlite_write_disabled": true,
+    "worker_execution_disabled": true,
+    "model_invocation_disabled": true,
+    "memory_write_disabled": true,
+    "boundary_ratio": 1
+  },
+  "sandbox_boundary": [
+    "red-team-only sandbox stays plan-only until explicit operator approval",
+    "godmode auto_jailbreak is never called by this plan",
+    "Hermes config.yaml and prefill.json remain read-only and unchanged",
+    "No Task Flow registry, SQLite, memory store, worker, or model path is enabled"
+  ],
+  "approval_gate": [
+    "operator approval must be explicit and cannot be inferred from this plan",
+    "approval must be reviewed against the godmode safety lock coverage artifact",
+    "approval must include rollback and validation checklist acknowledgement"
+  ],
+  "validation_checklist": [
+    "godmode safety lock coverage remains coverage_pass",
+    "auto_jailbreak remains disabled",
+    "Hermes config and prefill writes remain disabled",
+    "registry, SQLite, memory, worker, and model paths remain disabled",
+    "rollback path is documented before any sandbox experiment"
+  ],
+  "operator_approved": false,
+  "execution_started": false,
+  "real_writer_allowed": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "memory_write": false,
+  "hermes_config_write": false,
+  "hermes_prefill_write": false,
+  "blocked_actions": [
+    "using red-team-only sandbox boundary plan as operator approval",
+    "running Hermes godmode auto_jailbreak from boundary plan",
+    "writing jailbreak system prompt to Hermes config.yaml",
+    "writing Hermes prefill.json for godmode priming",
+    "starting real controlled executor activation from boundary plan",
+    "writing memory state before explicit approval",
+    "writing Task Flow registry state",
+    "writing SQLite state",
+    "running worker execution from boundary plan",
+    "invoking a model from boundary plan"
+  ],
+  "rollback_path": "Discard this read-only red-team-only sandbox boundary plan; it did not persist Hermes config, prefill, memory, registry, SQLite, worker, model, approval, or execution state.",
+  "next_safe_task": "Add a read-only red-team-only sandbox boundary plan coverage report before any sandbox experiment."
+}

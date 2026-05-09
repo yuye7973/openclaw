@@ -1,0 +1,32 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_noop_writer_apply.v1",
+  "created_at": "2026-05-06T20:38:53.659Z",
+  "dry_run": true,
+  "adapter_mode": "noop_apply",
+  "source_writer_review": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-writer-review.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "noop_applied",
+  "operation": "create",
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "validation_status": "pass",
+  "failures": [],
+  "would_apply": {
+    "flow_id": "hermes-flow-20260506T175813",
+    "sync_mode": "managed",
+    "registry_target": "task_flow_registry",
+    "operation": "create",
+    "expected_current_state": "missing",
+    "rollback_path": "Do not write the Task Flow registry; discard this review artifact and return to the read adapter artifact."
+  },
+  "blocked_actions": [
+    "Task Flow registry write",
+    "SQLite registry mutation",
+    "worker execution from no-op apply",
+    "model invocation during no-op apply"
+  ],
+  "rollback_path": "Discard this no-op apply artifact; because it did not write Task Flow registry or SQLite, no registry rollback is required.",
+  "next_safe_task": "Add an explicit operator approval token validator before any real Task Flow registry writer can exist."
+}

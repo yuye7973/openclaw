@@ -28,6 +28,7 @@ function spawnDetachedGatewayProcess(): { child: ChildProcess; pid?: number } {
     env: process.env,
     detached: true,
     stdio: "inherit",
+    windowsHide: process.platform === "win32",
   });
   child.unref();
   return { child, pid: child.pid ?? undefined };

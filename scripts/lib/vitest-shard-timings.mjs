@@ -122,5 +122,18 @@ export function writeShardTimings(samples, cwd = process.cwd(), env = process.en
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   const tempPath = `${outputPath}.${process.pid}.tmp`;
   fs.writeFileSync(tempPath, `${JSON.stringify({ version: 1, configs }, null, 2)}\n`, "utf8");
-  fs.renameSync(tempPath, outputPath);
+  try {
+    fs.renameSync(tempPath, outputPath);
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? error.code : "UNKNOWN";
+    if (code === "EPERM" || code === "EACCES") {
+      try {
+        fs.rmSync(tempPath, { force: true });
+      } catch {
+        // Best-effort cleanup for locked local filesystem paths.
+      }
+      return;
+    }
+    throw error;
+  }
 }

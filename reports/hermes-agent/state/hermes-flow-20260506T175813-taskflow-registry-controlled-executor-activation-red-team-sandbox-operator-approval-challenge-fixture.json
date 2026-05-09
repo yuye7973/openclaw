@@ -1,0 +1,61 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_controlled_executor_activation_red_team_sandbox_operator_approval_challenge_fixture.v1",
+  "created_at": "2026-05-07T12:52:36.6491764Z",
+  "dry_run": true,
+  "read_only": true,
+  "source_controlled_executor_activation_red_team_sandbox_boundary_plan_coverage_report": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-controlled-executor-activation-red-team-sandbox-boundary-plan-coverage-report.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "fixture_ready",
+  "operation": "create",
+  "validation_status": "pass",
+  "failures": [],
+  "challenge": {
+    "challenge_mode": "manual_approval_challenge_only",
+    "boundary_coverage_pass": true,
+    "coverage_ratio_complete": true,
+    "sandbox_boundary_plan_ready": true,
+    "godmode_activation_disabled": true,
+    "auto_jailbreak_disabled": true,
+    "approval_challenge_present": true,
+    "fingerprint_present": true,
+    "rollback_acknowledgement_required": true,
+    "fixture_is_not_approval": true,
+    "challenge_ratio": 1.0
+  },
+  "approval_challenge": {
+    "challenge_id": "manual-approval:hermes-flow-20260506T175813:red-team-sandbox:3532ec09ca9e288f",
+    "fingerprint": "3532ec09ca9e288f2a1734a63d37f87b35b680843d388cc2f0d369da68896982",
+    "required_acknowledgements": [
+      "I understand this fixture is not approval",
+      "I confirm godmode and auto_jailbreak remain disabled",
+      "I confirm Hermes config and prefill writes remain disabled",
+      "I confirm registry, SQLite, memory, worker, and model paths remain disabled",
+      "I acknowledge rollback must discard this fixture before any sandbox experiment"
+    ]
+  },
+  "operator_approved": false,
+  "execution_started": false,
+  "real_writer_allowed": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "memory_write": false,
+  "hermes_config_write": false,
+  "hermes_prefill_write": false,
+  "blocked_actions": [
+    "using red-team-only sandbox operator approval challenge fixture as approval",
+    "running Hermes godmode auto_jailbreak from approval challenge fixture",
+    "writing jailbreak system prompt to Hermes config.yaml",
+    "writing Hermes prefill.json for godmode priming",
+    "starting real controlled executor activation from approval challenge fixture",
+    "writing memory state before explicit approval",
+    "writing Task Flow registry state",
+    "writing SQLite state",
+    "running worker execution from approval challenge fixture",
+    "invoking a model from approval challenge fixture"
+  ],
+  "rollback_path": "Discard this read-only red-team-only sandbox operator approval challenge fixture; it did not persist Hermes config, prefill, memory, registry, SQLite, worker, model, approval, or execution state.",
+  "next_safe_task": "Add a read-only red-team-only sandbox operator approval challenge coverage report before any sandbox experiment."
+}

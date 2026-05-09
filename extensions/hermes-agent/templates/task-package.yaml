@@ -1,0 +1,18 @@
+id: hermes_task_package_v1
+name: Hermes Task Package
+description: Guarded OpenClaw task package template for review and execution handoff.
+version: 1
+fields:
+  - task_name
+  - task_goal
+  - execution_scope
+  - files_to_create_or_modify
+  - concrete_steps
+  - forbidden_actions
+  - validation_commands
+  - success_criteria
+  - report_format
+  - assumptions
+  - risk_class
+  - approval_required
+  - approval_request

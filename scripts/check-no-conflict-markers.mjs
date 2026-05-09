@@ -5,6 +5,17 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+const FALLBACK_IGNORED_DIRECTORIES = new Set([
+  ".artifacts",
+  ".git",
+  ".npm-cache",
+  ".npm-global",
+  ".openclaw",
+  "coverage",
+  "dist",
+  "node_modules",
+]);
+
 function isBinaryBuffer(buffer) {
   return buffer.includes(0);
 }
@@ -25,15 +36,58 @@ export function findConflictMarkerLines(content) {
   return matches;
 }
 
+function listFilesFallback(rootDir) {
+  const files = [];
+  const stack = [rootDir];
+  while (stack.length > 0) {
+    const currentDir = stack.pop();
+    if (!currentDir) {
+      continue;
+    }
+    let entries = [];
+    try {
+      entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const absolutePath = path.join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        if (!FALLBACK_IGNORED_DIRECTORIES.has(entry.name)) {
+          stack.push(absolutePath);
+        }
+        continue;
+      }
+      if (entry.isFile()) {
+        files.push(absolutePath);
+      }
+    }
+  }
+  files.sort((left, right) => left.localeCompare(right));
+  return files;
+}
+
 export function listTrackedFiles(cwd = process.cwd()) {
-  const output = execFileSync("git", ["ls-files", "-z"], {
-    cwd,
-    encoding: "utf8",
-  });
-  return output
-    .split("\0")
-    .filter(Boolean)
-    .map((relativePath) => path.join(cwd, relativePath));
+  try {
+    const output = execFileSync("git", ["ls-files", "-z"], {
+      cwd,
+      encoding: "utf8",
+    });
+    return output
+      .split("\0")
+      .filter(Boolean)
+      .map((relativePath) => path.join(cwd, relativePath));
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      ["EPERM", "EACCES", "ENOENT"].includes(error.code)
+    ) {
+      return listFilesFallback(cwd);
+    }
+    throw error;
+  }
 }
 
 export function findConflictMarkersInFiles(filePaths, readFile = fs.readFileSync) {

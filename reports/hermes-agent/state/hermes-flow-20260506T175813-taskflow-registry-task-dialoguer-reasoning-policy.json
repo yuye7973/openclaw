@@ -1,0 +1,84 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_task_dialoguer_reasoning_policy.v1",
+  "created_at": "2026-05-07T03:10:00.000Z",
+  "dry_run": true,
+  "read_only": true,
+  "source_task_dialoguer_handoff_package": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-task-dialoguer-handoff-package.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "policy_ready",
+  "operation": "create",
+  "validation_status": "pass",
+  "failures": [],
+  "reasoning_policy": {
+    "goal_understanding": {
+      "input": "user_request_or_heartbeat",
+      "output": "single_next_safe_task_candidate",
+      "rule": "Extract the user's intended outcome, reduce it to one bounded OpenClaw-native task, and preserve the original safety boundary."
+    },
+    "risk_classification": [
+      {
+        "class": "read_only",
+        "when": "The task only reads existing artifacts or emits a report.",
+        "allowed_next_step": "Produce a coverage or summary artifact."
+      },
+      {
+        "class": "dry_run",
+        "when": "The task creates a deterministic fixture or handoff package without side effects.",
+        "allowed_next_step": "Validate the fixture before any approval or executor intake."
+      },
+      {
+        "class": "approval_required",
+        "when": "The task can mutate repository files, start a worker, invoke a model, or write state.",
+        "allowed_next_step": "Create an approval request and wait for a separate operator approval token."
+      },
+      {
+        "class": "blocked",
+        "when": "Required inputs are missing, validation failed, or the request bypasses guardrails.",
+        "allowed_next_step": "Stop and return the exact blocker plus rollback path."
+      }
+    ],
+    "next_safe_task_selection": {
+      "ranking_order": [
+        "fix failing safety or validation gate",
+        "add read-only coverage for the newest artifact",
+        "add handoff artifact before executor work",
+        "add controlled executor intake validator",
+        "only then consider execution"
+      ],
+      "one_task_per_round": true,
+      "must_reference_existing_artifact": true
+    },
+    "approval_gate_decision": {
+      "approval_required_before_execution": true,
+      "approval_source": "separate_operator_approval_token",
+      "dialogue_or_policy_is_never_approval": true
+    },
+    "handoff_rules": {
+      "handoff_to_controlled_executor": true,
+      "executor_invocation_allowed": false,
+      "execution_started": false
+    },
+    "feedback_loop": {
+      "verifier_required": true,
+      "learning_update_required": true,
+      "next_dialogue_required": true
+    }
+  },
+  "operator_approved": false,
+  "real_writer_allowed": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "blocked_actions": [
+    "executing the selected task from the reasoning policy",
+    "using the policy as operator approval",
+    "writing Task Flow registry state",
+    "writing SQLite state",
+    "starting worker execution",
+    "invoking a model from the policy"
+  ],
+  "rollback_path": "Discard this read-only reasoning policy; it did not persist registry, SQLite, worker, model, approval, or execution state.",
+  "next_safe_task": "Add a read-only reasoning policy coverage report before creating controlled executor intake."
+}

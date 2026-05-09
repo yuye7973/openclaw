@@ -1,3 +1,4 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { InstalledPluginIndex } from "./installed-plugin-index.js";
 import {
@@ -46,8 +47,8 @@ describe("plugin control-plane context", () => {
     const contextA = resolvePluginDiscoveryContext({ config, env: envA });
     const contextB = resolvePluginDiscoveryContext({ config, env: envB });
 
-    expect(contextA.loadPaths).toEqual(["/openclaw/a/plugins", "/opt/shared"]);
-    expect(contextB.loadPaths).toEqual(["/openclaw/b/plugins", "/opt/shared"]);
+    expect(contextA.loadPaths).toEqual([path.resolve("/openclaw/a/plugins"), path.resolve("/opt/shared")]);
+    expect(contextB.loadPaths).toEqual([path.resolve("/openclaw/b/plugins"), path.resolve("/opt/shared")]);
     expect(resolvePluginDiscoveryFingerprint({ config, env: envA })).not.toBe(
       resolvePluginDiscoveryFingerprint({ config, env: envB }),
     );
@@ -98,9 +99,9 @@ describe("plugin control-plane context", () => {
 
     expect(context).toMatchObject({
       discovery: {
-        loadPaths: ["/opt/plugins"],
+        loadPaths: [path.resolve("/opt/plugins")],
         roots: {
-          global: "/openclaw/a/.openclaw/extensions",
+          global: path.resolve("/openclaw/a/.openclaw/extensions"),
         },
       },
       inventoryFingerprint: "inventory",

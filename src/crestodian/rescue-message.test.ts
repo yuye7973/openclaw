@@ -287,11 +287,12 @@ describe("Crestodian rescue message", () => {
     vi.stubEnv("OPENCLAW_STATE_DIR", tempDir);
     const cfg: OpenClawConfig = { crestodian: { rescue: { enabled: true } } };
     const deps = { runAgentsAdd: vi.fn(async () => {}) };
+    const resolvedWorkspace = path.resolve("/tmp/work");
 
     await expect(
       runRescue("/crestodian create agent work workspace /tmp/work", cfg, commandContext(), deps),
     ).resolves.toBe(
-      "Plan: create agent work with workspace /tmp/work. Reply /crestodian yes to apply.",
+      `Plan: create agent work with workspace ${resolvedWorkspace}. Reply /crestodian yes to apply.`,
     );
     await expect(runRescue("/crestodian yes", cfg, commandContext(), deps)).resolves.toContain(
       "[crestodian] done: agents.create",
@@ -301,7 +302,7 @@ describe("Crestodian rescue message", () => {
     expect(deps.runAgentsAdd).toHaveBeenCalledWith(
       {
         name: "work",
-        workspace: "/tmp/work",
+        workspace: resolvedWorkspace,
         nonInteractive: true,
       },
       expect.any(Object),
@@ -316,7 +317,7 @@ describe("Crestodian rescue message", () => {
         channel: "whatsapp",
         senderId: "user:owner",
         agentId: "work",
-        workspace: "/tmp/work",
+        workspace: resolvedWorkspace,
       },
     });
   });

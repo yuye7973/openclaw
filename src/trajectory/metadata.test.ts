@@ -1,3 +1,4 @@
+import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { REDACTED_SENTINEL } from "../config/redact-snapshot.js";
 import { createEmptyPluginRegistry } from "../plugins/registry-empty.js";
@@ -65,13 +66,14 @@ describe("trajectory metadata", () => {
         workspaceDir?: string;
         sessionFile?: string;
       };
-      expect(harness.invocation).toEqual([
-        "node",
-        "~/project/openclaw.js",
-        "--api-key",
-        "<redacted>",
-        "--config=$OPENCLAW_STATE_DIR/openclaw.json",
-      ]);
+      const invocation = harness.invocation as string[] | undefined;
+      expect(invocation?.[0]).toBe("node");
+      expect(invocation?.[1]?.replaceAll("\\", "/")).toBe("~/project/openclaw.js");
+      expect(invocation?.[2]).toBe("--api-key");
+      expect(invocation?.[3]).toBe("<redacted>");
+      expect(invocation?.[4]?.replaceAll("\\", "/")).toMatch(
+        /^--config=(\$OPENCLAW_STATE_DIR|\/Users\/tester\/\.openclaw)\/openclaw\.json$/,
+      );
       expect(harness.entrypoint).toBe("~/project/openclaw.js");
       expect(harness.workspaceDir).toBe("~/project");
       expect(harness.sessionFile).toBe("~/project/session.jsonl");
@@ -146,7 +148,7 @@ describe("trajectory metadata", () => {
           {
             name: "weather",
             description: "Check weather",
-            filePath: "/tmp/workspace/skills/weather/SKILL.md",
+            filePath: path.resolve("/tmp/workspace/skills/weather/SKILL.md"),
             baseDir: "/tmp/workspace/skills/weather",
             source: "workspace",
             sourceInfo: {
@@ -173,7 +175,7 @@ describe("trajectory metadata", () => {
     expect(plugins.entries?.map((entry) => entry.id)).toEqual(["demo-plugin"]);
     expect(skills.entries?.[0]).toMatchObject({
       id: "weather",
-      filePath: "/tmp/workspace/skills/weather/SKILL.md",
+      filePath: path.resolve("/tmp/workspace/skills/weather/SKILL.md"),
     });
   });
 

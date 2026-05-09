@@ -235,7 +235,21 @@ export async function runTsdownBuildInvocation(invocation, params = {}) {
   let settled = false;
   let lastOutputAt = Date.now();
 
-  const child = spawn(invocation.command, invocation.args, invocation.options);
+  let child;
+  try {
+    child = spawn(invocation.command, invocation.args, invocation.options);
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? error.code : "UNKNOWN";
+    const canDowngradeStdio = Array.isArray(invocation.options?.stdio);
+    if (code === "EPERM" && canDowngradeStdio) {
+      child = spawn(invocation.command, invocation.args, {
+        ...invocation.options,
+        stdio: "inherit",
+      });
+    } else {
+      throw error;
+    }
+  }
   const pidText = child.pid ? ` pid=${child.pid}` : "";
 
   function markOutput() {

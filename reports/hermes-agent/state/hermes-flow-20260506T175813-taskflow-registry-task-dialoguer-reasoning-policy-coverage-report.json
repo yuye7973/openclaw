@@ -1,0 +1,41 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_task_dialoguer_reasoning_policy_coverage_report.v1",
+  "created_at": "2026-05-07T03:44:52.710Z",
+  "dry_run": true,
+  "read_only": true,
+  "source_task_dialoguer_reasoning_policy": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-task-dialoguer-reasoning-policy.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "coverage_pass",
+  "operation": "create",
+  "validation_status": "pass",
+  "failures": [],
+  "coverage": {
+    "policy_ready": true,
+    "goal_understanding_rule_present": true,
+    "risk_classes_complete": true,
+    "next_safe_task_selection_locked": true,
+    "approval_gate_locked": true,
+    "handoff_rules_locked": true,
+    "feedback_loop_complete": true,
+    "all_writes_disabled": true,
+    "model_invocation_disabled": true,
+    "coverage_ratio": 1
+  },
+  "operator_approved": false,
+  "real_writer_allowed": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "blocked_actions": [
+    "using reasoning policy coverage report as execution approval",
+    "starting controlled execution from reasoning policy coverage report",
+    "writing Task Flow registry state",
+    "writing SQLite state",
+    "running worker execution from reasoning policy coverage report",
+    "invoking a model from reasoning policy coverage report"
+  ],
+  "rollback_path": "Discard this read-only reasoning policy coverage report; it did not persist registry, SQLite, worker, model, approval, or execution state.",
+  "next_safe_task": "Add a controlled executor intake validator that consumes this reasoning policy coverage report without starting execution."
+}

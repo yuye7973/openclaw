@@ -165,6 +165,7 @@ export function runOpenClawCompileCacheRespawnPlan(
   const child = runtime.spawn(plan.command, plan.args, {
     stdio: "inherit",
     env: plan.env,
+    windowsHide: process.platform === "win32",
   });
   // Give the child a moment to honor forwarded signals, then exit the parent so
   // a child that ignores SIGTERM cannot keep the compile-cache wrapper alive indefinitely.

@@ -189,9 +189,10 @@ export function acquireLocalHeavyCheckLockSync(params) {
   }
 
   const commonDir = resolveGitCommonDir(params.cwd);
-  const locksDir = path.join(commonDir, "openclaw-local-checks");
-  const lockDir = path.join(locksDir, `${params.lockName ?? "heavy-check"}.lock`);
-  const ownerPath = path.join(lockDir, "owner.json");
+  const fallbackLocksDir = path.join(params.cwd, ".artifacts", "openclaw-local-checks");
+  let locksDir = path.join(commonDir, "openclaw-local-checks");
+  let lockDir = path.join(locksDir, `${params.lockName ?? "heavy-check"}.lock`);
+  let ownerPath = path.join(lockDir, "owner.json");
   const timeoutMs = readPositiveInt(
     env.OPENCLAW_HEAVY_CHECK_LOCK_TIMEOUT_MS,
     DEFAULT_LOCK_TIMEOUT_MS,
@@ -209,7 +210,19 @@ export function acquireLocalHeavyCheckLockSync(params) {
   let waitingLogged = false;
   let lastProgressAt = 0;
 
-  fs.mkdirSync(locksDir, { recursive: true });
+  try {
+    fs.mkdirSync(locksDir, { recursive: true });
+  } catch (error) {
+    const code = error && typeof error === "object" ? error.code : "UNKNOWN";
+    if (process.platform !== "win32" || (code !== "EPERM" && code !== "EACCES")) {
+      throw error;
+    }
+    locksDir = fallbackLocksDir;
+    lockDir = path.join(locksDir, `${params.lockName ?? "heavy-check"}.lock`);
+    ownerPath = path.join(lockDir, "owner.json");
+    fs.mkdirSync(locksDir, { recursive: true });
+    console.error(`[${params.toolName}] heavy-check lock fallback to ${locksDir} (${code}).`);
+  }
   if (!params.lockName) {
     cleanupLegacyLockDirs(locksDir, staleLockMs);
   }
@@ -225,19 +238,52 @@ export function acquireLocalHeavyCheckLockSync(params) {
         createdAt: new Date().toISOString(),
       });
       return () => {
-        fs.rmSync(lockDir, { recursive: true, force: true });
+        try {
+          fs.rmSync(lockDir, { recursive: true, force: true });
+        } catch {
+          // Best-effort cleanup for local lock dirs.
+        }
       };
     } catch (error) {
       if (!isAlreadyExistsError(error)) {
+        const code = error && typeof error === "object" ? error.code : "UNKNOWN";
+        if (process.platform === "win32" && (code === "EPERM" || code === "EACCES") && locksDir !== fallbackLocksDir) {
+          locksDir = fallbackLocksDir;
+          lockDir = path.join(locksDir, `${params.lockName ?? "heavy-check"}.lock`);
+          ownerPath = path.join(lockDir, "owner.json");
+          fs.mkdirSync(locksDir, { recursive: true });
+          console.error(`[${params.toolName}] heavy-check lock fallback to ${locksDir} (${code}).`);
+          continue;
+        }
         throw error;
       }
 
       const owner = readOwnerFile(ownerPath);
       if (shouldReclaimLock({ owner, lockDir, staleLockMs })) {
-        fs.rmSync(lockDir, { recursive: true, force: true });
-        continue;
+        try {
+          fs.rmSync(lockDir, { recursive: true, force: true });
+          continue;
+        } catch (reclaimError) {
+          if (isPermissionDeniedError(reclaimError)) {
+            try {
+              writeOwnerFile(ownerPath, {
+                pid: process.pid,
+                tool: params.toolName,
+                cwd: params.cwd,
+                hostname: os.hostname(),
+                createdAt: new Date().toISOString(),
+              });
+              console.error(
+                `[${params.toolName}] stale heavy-check lock directory cannot be deleted; took over owner lease at ${ownerPath}.`,
+              );
+              return () => {};
+            } catch {
+              // lease takeover failed; continue waiting
+            }
+          }
+          // lock may still be in use by another process
+        }
       }
-
       const elapsedMs = Date.now() - startedAt;
       if (elapsedMs >= timeoutMs) {
         const ownerLabel = describeOwner(owner);
@@ -358,16 +404,40 @@ function isAlreadyExistsError(error) {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === "EEXIST");
 }
 
+
+function isPermissionDeniedError(error) {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error.code === "EPERM" || error.code === "EACCES"),
+  );
+}
 function shouldReclaimLock({ owner, lockDir, staleLockMs }) {
+  const lockAgeMs = readLockAgeMs(lockDir);
+
   if (owner && typeof owner.pid === "number") {
-    return !isProcessAlive(owner.pid);
+    if (isProcessAlive(owner.pid)) {
+      return false;
+    }
+    if (lockAgeMs === null) {
+      return true;
+    }
+    return lockAgeMs >= staleLockMs;
   }
 
+  if (lockAgeMs === null) {
+    return true;
+  }
+  return lockAgeMs >= staleLockMs;
+}
+
+function readLockAgeMs(lockDir) {
   try {
     const stats = fs.statSync(lockDir);
-    return Date.now() - stats.mtimeMs >= staleLockMs;
+    return Date.now() - stats.mtimeMs;
   } catch {
-    return true;
+    return null;
   }
 }
 
@@ -376,10 +446,50 @@ function isProcessAlive(pid) {
     process.kill(pid, 0);
     return true;
   } catch (error) {
-    return Boolean(error && typeof error === "object" && "code" in error && error.code === "EPERM");
+    const code = error && typeof error === "object" && "code" in error ? error.code : "UNKNOWN";
+    if (code === "EPERM") {
+      const listed = probeProcessExists(pid);
+      if (listed !== null) {
+        return listed;
+      }
+      return false;
+    }
+    return false;
   }
 }
 
+function probeProcessExists(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return null;
+  }
+
+  if (process.platform === "win32") {
+    const result = spawnSync("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    if (result.status !== 0) {
+      return null;
+    }
+    const output = result.stdout.trim();
+    if (output.length === 0) {
+      return false;
+    }
+    return output.includes(`,"${pid}",`);
+  }
+
+  const result = spawnSync("ps", ["-p", String(pid), "-o", "pid="], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  if (result.status !== 0) {
+    return false;
+  }
+  return result.stdout
+    .trim()
+    .split(/\s+/u)
+    .includes(String(pid));
+}
 function describeOwner(owner) {
   if (!owner || typeof owner !== "object") {
     return "";

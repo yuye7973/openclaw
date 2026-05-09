@@ -28,6 +28,7 @@ describe("buildCliRespawnPlan", () => {
       env: {},
       execArgv: [],
       autoNodeExtraCaCerts: "/etc/ssl/certs/ca-certificates.crt",
+    platform: "linux",
     });
 
     expect(plan).not.toBeNull();
@@ -46,6 +47,7 @@ describe("buildCliRespawnPlan", () => {
         env: {},
         execArgv: [],
         autoNodeExtraCaCerts: "/etc/ssl/certs/ca-certificates.crt",
+      platform: "linux",
       });
 
       expect(plan).not.toBeNull();
@@ -73,6 +75,7 @@ describe("buildCliRespawnPlan", () => {
       env: { NODE_EXTRA_CA_CERTS: "/custom/ca.pem" },
       execArgv: [],
       autoNodeExtraCaCerts: "/etc/ssl/certs/ca-certificates.crt",
+    platform: "linux",
     });
 
     expect(plan?.env.NODE_EXTRA_CA_CERTS).toBe("/custom/ca.pem");

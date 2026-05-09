@@ -278,6 +278,9 @@ async function main() {
   const suiteStartedAt = performance.now();
   const args = process.argv.slice(2);
   const baseEnv = resolveLocalVitestEnv(process.env);
+  if (process.platform === "win32" && !baseEnv.OPENCLAW_TEST_PROJECTS_PARALLEL && !baseEnv.OPENCLAW_TEST_PROJECTS_SERIAL) {
+    baseEnv.OPENCLAW_TEST_PROJECTS_SERIAL = "1";
+  }
   const { targetArgs } = parseTestProjectsArgs(args, process.cwd());
   const changedTargetArgs =
     targetArgs.length === 0
@@ -323,6 +326,7 @@ async function main() {
         cwd: process.cwd(),
         env: baseEnv,
         toolName: "test",
+        lockName: "test-" + process.pid,
       })
     : () => {};
 

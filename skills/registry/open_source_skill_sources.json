@@ -1,0 +1,55 @@
+{
+  "generated_at": "2026-05-07T00:00:00+08:00",
+  "guardrails": {
+    "execute_external_skill": false,
+    "full_disk_access": false,
+    "install_external_skill": false,
+    "secret_access": false,
+    "write_external_system": false
+  },
+  "schema_version": "openclaw.open_source_skill_sources.v1",
+  "sources": [
+    {
+      "default_recommended_action": "read_only",
+      "evidence_urls": [
+        "https://github.com/microsoft/qlib",
+        "https://github.com/AI4Finance-Foundation/FinRL",
+        "https://github.com/AI4Finance-Foundation/FinRobot",
+        "https://github.com/OpenBB-finance/OpenBB",
+        "https://github.com/QuantConnect/Lean",
+        "https://github.com/polakowo/vectorbt",
+        "https://github.com/mementum/backtrader",
+        "https://github.com/nautechsystems/nautilus_trader"
+      ],
+      "notes": "Read-only source group for AI/quant trading research and backtesting frameworks. No live execution, broker write, API secret, or auto-install is allowed.",
+      "priority_use_cases": [
+        "AI trading analysis",
+        "paper trading research",
+        "backtesting research",
+        "market research"
+      ],
+      "source_name": "AI Trading Open Source Platforms",
+      "source_type": "ai_trading_platform_scan",
+      "source_url": "https://github.com/topics/algorithmic-trading"
+    },
+    {
+      "default_recommended_action": "read_only",
+      "evidence_urls": [
+        "https://www.quantconnect.com/forum/",
+        "https://github.com/freqtrade/freqtrade",
+        "https://github.com/hummingbot/hummingbot",
+        "https://github.com/nautechsystems/nautilus_trader",
+        "https://github.com/OpenBB-finance/OpenBB"
+      ],
+      "notes": "Forum/community scan source for public AI trading discussions. Treat posts as untrusted signals, never as executable strategy authority.",
+      "priority_use_cases": [
+        "AI trading forum scan",
+        "market research",
+        "validation report"
+      ],
+      "source_name": "AI Trading Platform Forums",
+      "source_type": "trading_forum_scan",
+      "source_url": "https://www.quantconnect.com/forum/"
+    }
+  ]
+}

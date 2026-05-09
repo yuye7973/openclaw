@@ -1,0 +1,59 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_real_writer_promotion_preflight_coverage_report.v1",
+  "created_at": "2026-05-06T22:59:57.385Z",
+  "dry_run": true,
+  "read_only": true,
+  "source_real_writer_promotion_preflight_report": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-real-writer-promotion-preflight-report.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "coverage_pass",
+  "operation": "create",
+  "validation_status": "pass",
+  "failures": [],
+  "coverage": {
+    "required_fields_checked": [
+      "source_real_writer_api_contract_coverage_report",
+      "preflight.api_contract_coverage_green",
+      "preflight.operator_approval_boundary_locked",
+      "preflight.rollback_precondition_present",
+      "preflight.disabled_commit_strategy_locked",
+      "preflight.preflight_ratio",
+      "next_safe_task"
+    ],
+    "safety_flags_checked": [
+      "dry_run",
+      "read_only",
+      "operator_approved",
+      "real_writer_allowed",
+      "registry_write_allowed",
+      "taskflow_registry_write",
+      "sqlite_write",
+      "worker_execution",
+      "model_invoked",
+      "preflight.all_writes_disabled"
+    ],
+    "promotion_preflight_green": true,
+    "api_contract_coverage_green": true,
+    "operator_approval_boundary_locked": true,
+    "rollback_precondition_present": true,
+    "disabled_commit_strategy_locked": true,
+    "all_writes_disabled": true,
+    "coverage_ratio": 1
+  },
+  "operator_approved": false,
+  "real_writer_allowed": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "blocked_actions": [
+    "Task Flow registry write",
+    "SQLite registry mutation",
+    "worker execution from real writer promotion preflight coverage report",
+    "model invocation during real writer promotion preflight coverage report",
+    "creating the real Task Flow registry writer from promotion preflight coverage",
+    "automatic promotion from preflight coverage to writer code"
+  ],
+  "rollback_path": "Discard this read-only promotion preflight coverage report; it did not persist registry, SQLite, worker, or model state.",
+  "next_safe_task": "Add a read-only real writer final readiness lock report before any real Task Flow registry writer code exists."
+}

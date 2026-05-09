@@ -482,7 +482,17 @@ describe("exportTrajectoryBundle", () => {
       })}\n`,
       "utf8",
     );
-    fs.symlinkSync(targetFile, symlinkFile);
+    let symlinkErrorCode: string | undefined;
+    try {
+      fs.symlinkSync(targetFile, symlinkFile);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EPERM" || code === "EACCES" || code === "ENOTSUP") {
+        symlinkErrorCode = code;
+      } else {
+        throw error;
+      }
+    }
 
     const bundle = await exportTrajectoryBundle({
       outputDir,
@@ -491,6 +501,7 @@ describe("exportTrajectoryBundle", () => {
       workspaceDir: tmpDir,
     });
 
+    expect(["EPERM", "EACCES", "ENOTSUP", undefined]).toContain(symlinkErrorCode);
     expect(bundle.runtimeFile).toBeUndefined();
     expect(bundle.events.some((event) => event.type === "symlink-runtime")).toBe(false);
   });
@@ -747,7 +758,7 @@ describe("exportTrajectoryBundle", () => {
     expect(exportedEvents.some((event) => event.type === "tool.call")).toBe(true);
     expect(exportedEvents.some((event) => event.type === "tool.result")).toBe(true);
     expect(exportedEvents.some((event) => event.type === "context.compiled")).toBe(true);
-    expect(JSON.stringify(exportedEvents)).toContain("$WORKSPACE_DIR/inside.txt");
+    expect(JSON.stringify(exportedEvents).replaceAll("\\\\", "/")).toContain("$WORKSPACE_DIR/inside.txt");
     expect(JSON.stringify(exportedEvents)).not.toContain("$WORKSPACE_DIR2");
 
     const manifest = JSON.parse(fs.readFileSync(path.join(outputDir, "manifest.json"), "utf8")) as {

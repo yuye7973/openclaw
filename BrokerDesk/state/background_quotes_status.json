@@ -1,0 +1,63 @@
+{
+  "generatedAt": "2026-05-07T11:52:53.7114799+08:00",
+  "mode": "background-quotes-once",
+  "status": "blocked",
+  "overallReady": false,
+  "brokerActionRequired": false,
+  "nextActionOwner": "capital",
+  "nextAction": "先在 selected profile 儲存群益帳號密碼，再執行背景報價。",
+  "processId": 28788,
+  "executablePath": "D:\\群益及元大API\\BrokerDesk\\dist\\BrokerDesk.exe",
+  "projectRoot": "D:\\OpenClaw",
+  "startedAt": "2026-05-07T11:52:53.2433589+08:00",
+  "endedAt": "2026-05-07T11:52:53.7114799+08:00",
+  "lastHeartbeatAt": "N/A",
+  "keepAliveUntil": "N/A",
+  "holdSeconds": 0,
+  "marketCount": 9,
+  "capitalMarketScope": "all",
+  "capitalFullUniverseQuotes": false,
+  "capitalMaxBatchQuoteSubscriptions": 50,
+  "capitalBatchDelayMilliseconds": 0,
+  "capitalBatchStartIndex": 0,
+  "quoteUniverseCount": 0,
+  "blockingProcessCount": 0,
+  "blockingProcesses": [
+  ],
+  "capitalApiPeerProcessCount": 0,
+  "capitalApiPeerProcesses": [
+  ],
+  "blockers": [
+    "群益 selected profile 尚未儲存帳號密碼",
+    "商品宇宙為 0"
+  ],
+  "capital": {
+    "profile": "default",
+    "loginMethod": "SKCenterLib_LoginSetQuote:Y",
+    "loginGuardActive": false,
+    "nextAllowedLoginAt": "N/A",
+    "accountSet": false,
+    "attempted": false,
+    "quoteEventConfirmed": false,
+    "message": "群益未登入（selected profile 尚未儲存帳號密碼）",
+    "brokerActionRequired": false,
+    "nextAction": "先在 selected profile 儲存群益帳號密碼，再執行背景報價。",
+    "supportBundleCommand": "run-capital-support-bundle.bat",
+    "supportBundleOutputHint": "BrokerDesk\\release\\capital-support-bundle-*",
+    "notes": [
+    ]
+  },
+  "yuanta": {
+    "referenceOnly": true,
+    "participatesInQuoteGate": false,
+    "profile": "default",
+    "accountSet": false,
+    "attempted": false,
+    "quoteEventConfirmed": false,
+    "message": "元大為參考資料，不參與群益 API 報價閉環，也不執行背景登入",
+    "notes": [
+      "referenceOnly=true"
+    ]
+  },
+  "fatalError": ""
+}

@@ -1,3 +1,4 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   evaluateLocalTestboxKey,
@@ -6,6 +7,8 @@ import {
   resolveTestboxId,
   writeOpenClawTestboxClaim,
 } from "../../scripts/blacksmith-testbox-state.mjs";
+
+const toPosixPath = (value: string) => value.replaceAll("\\", "/");
 
 describe("blacksmith testbox state", () => {
   it("parses Testbox ids from args and env", () => {
@@ -24,14 +27,14 @@ describe("blacksmith testbox state", () => {
     });
 
     expect(result.ok).toBe(false);
-    expect(result.keyPath).toBe("/state/testboxes/tbx_01kqap50t9fqggzw1akg5dtmmq/id_ed25519");
+    expect(result.keyPath).toBe(path.join("/state/testboxes", "tbx_01kqap50t9fqggzw1akg5dtmmq", "id_ed25519"));
     expect(result.problems[0]).toContain("local Testbox SSH key missing");
   });
 
   it("accepts a Testbox id with a local private key", () => {
     const result = evaluateLocalTestboxKey({
       env: { OPENCLAW_BLACKSMITH_TESTBOX_STATE_DIR: "/state/testboxes" },
-      exists: (file) => file.endsWith("/tbx_01kqap50t9fqggzw1akg5dtmmq/id_ed25519"),
+      exists: (file) => toPosixPath(file).endsWith("/tbx_01kqap50t9fqggzw1akg5dtmmq/id_ed25519"),
       testboxId: "tbx_01kqap50t9fqggzw1akg5dtmmq",
     });
 
@@ -49,7 +52,7 @@ describe("blacksmith testbox state", () => {
 
     expect(result.ok).toBe(false);
     expect(result.claimPath).toBe(
-      "/state/testboxes/tbx_01kqap50t9fqggzw1akg5dtmmq/openclaw-runner.json",
+      path.join("/state/testboxes", "tbx_01kqap50t9fqggzw1akg5dtmmq", "openclaw-runner.json"),
     );
     expect(result.problems[0]).toContain("OpenClaw Testbox claim missing");
   });
@@ -80,7 +83,7 @@ describe("blacksmith testbox state", () => {
       readFile: () =>
         JSON.stringify({
           claimedAt: "2026-04-29T12:00:00.000Z",
-          repoRoot: "/repo/current",
+          repoRoot: path.resolve("/repo/current"),
         }),
       testboxId: "tbx_01kqap50t9fqggzw1akg5dtmmq",
     });
@@ -102,7 +105,7 @@ describe("blacksmith testbox state", () => {
 
     expect(claim.payload).toEqual({
       claimedAt: "2026-04-29T12:00:00.000Z",
-      repoRoot: "/repo/current",
+      repoRoot: path.resolve("/repo/current"),
       runnerVersion: 1,
     });
     expect(

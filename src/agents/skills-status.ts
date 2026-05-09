@@ -1,4 +1,6 @@
+import fs from "node:fs";
 import path from "node:path";
+import YAML from "yaml";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { evaluateEntryRequirementsForCurrentPlatform } from "../shared/entry-status.js";
 import type { RequirementConfigCheck, Requirements } from "../shared/requirements.js";
@@ -21,6 +23,13 @@ import { resolveBundledSkillsContext } from "./skills/bundled-context.js";
 import { resolveSkillSource } from "./skills/source.js";
 
 export type SkillStatusConfigCheck = RequirementConfigCheck;
+
+export type SkillAgentInterface = {
+  displayName: string;
+  shortDescription?: string;
+  defaultPrompt?: string;
+  filePath: string;
+};
 
 export type SkillInstallOption = {
   id: string;
@@ -52,6 +61,7 @@ export type SkillStatusEntry = {
   missing: Requirements;
   configChecks: SkillStatusConfigCheck[];
   install: SkillInstallOption[];
+  agentInterface?: SkillAgentInterface;
 };
 
 export type SkillStatusReport = {
@@ -64,6 +74,49 @@ export type SkillStatusReport = {
 
 function resolveSkillKey(entry: SkillEntry): string {
   return entry.metadata?.skillKey ?? entry.skill.name;
+}
+
+function readStringValue(input: unknown): string | undefined {
+  return typeof input === "string" && input.trim().length > 0 ? input.trim() : undefined;
+}
+
+function readSkillAgentInterface(entry: SkillEntry): SkillAgentInterface | undefined {
+  const filePath = path.join(entry.skill.baseDir, "agents", "openai.yaml");
+  let raw: string;
+  try {
+    raw = fs.readFileSync(filePath, "utf-8");
+  } catch {
+    return undefined;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = YAML.parse(raw, { schema: "core" }) as unknown;
+  } catch {
+    return undefined;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return undefined;
+  }
+
+  const interfaceBlock = (parsed as Record<string, unknown>).interface;
+  if (!interfaceBlock || typeof interfaceBlock !== "object" || Array.isArray(interfaceBlock)) {
+    return undefined;
+  }
+
+  const record = interfaceBlock as Record<string, unknown>;
+  const displayName = readStringValue(record.display_name) ?? readStringValue(record.displayName);
+  if (!displayName) {
+    return undefined;
+  }
+
+  return {
+    displayName,
+    shortDescription:
+      readStringValue(record.short_description) ?? readStringValue(record.shortDescription),
+    defaultPrompt: readStringValue(record.default_prompt) ?? readStringValue(record.defaultPrompt),
+    filePath,
+  };
 }
 
 function selectPreferredInstallSpec(
@@ -237,6 +290,7 @@ function buildSkillStatus(
   const eligible = !disabled && !blockedByAllowlist && requirementsSatisfied;
   const availableToAgent = eligible && !blockedByAgentFilter;
   const userInvocable = isSkillUserInvocable(entry);
+  const agentInterface = readSkillAgentInterface(entry);
 
   return {
     name: entry.skill.name,
@@ -261,6 +315,7 @@ function buildSkillStatus(
     missing,
     configChecks,
     install: normalizeInstallOptions(entry, prefs ?? resolveSkillsInstallPreferences(config)),
+    agentInterface,
   };
 }
 

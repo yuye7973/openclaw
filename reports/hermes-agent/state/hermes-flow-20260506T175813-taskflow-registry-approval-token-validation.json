@@ -1,0 +1,33 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_approval_token_validation.v1",
+  "created_at": "2026-05-06T20:42:54.531Z",
+  "dry_run": true,
+  "validator_mode": "approval_token_format",
+  "source_noop_apply": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-noop-writer-apply.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "token_validated",
+  "operation": "create",
+  "approval_token_present": true,
+  "approval_token_valid": true,
+  "approval_token_saved": false,
+  "operator_approved": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "validation_status": "pass",
+  "failures": [],
+  "expected_token_challenge": "approve:<flow_id>:<operation>:taskflow-registry",
+  "token_fingerprint": "169d79883cf1c0efd89bd72210c49907bf0c2624a3ccc7662df0083387503709",
+  "blocked_actions": [
+    "automatic operator approval",
+    "approval token persistence",
+    "Task Flow registry write",
+    "SQLite registry mutation",
+    "worker execution from token validation",
+    "model invocation during token validation"
+  ],
+  "rollback_path": "Discard this approval token validation artifact; no approval token, registry state, or SQLite state was persisted.",
+  "next_safe_task": "Add a dry-run registry writer contract fixture that consumes the token validation artifact but still cannot write SQLite."
+}

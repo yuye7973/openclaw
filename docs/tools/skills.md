@@ -142,6 +142,11 @@ Configured skill roots also support one grouping level, such as
 `skills/<group>/<skill>/SKILL.md`, so related third-party skills can be
 kept under a shared folder without broad recursive scanning.
 
+Workspace skills are immediately usable by name after the next skills
+snapshot refresh. For example, the Tengyi 401 PDF trainer can be invoked
+as the `tengyi-401-pdf-autonomous-trainer` skill once it is present in
+`<workspace>/skills`.
+
 ClawHub skill pages expose the latest security scan state before install,
 with scanner detail pages for VirusTotal, ClawScan, and static analysis.
 `openclaw skills install <slug>` remains only the install path; publishers

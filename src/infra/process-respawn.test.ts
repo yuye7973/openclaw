@@ -290,6 +290,7 @@ describe("respawnGatewayProcessForUpdate", () => {
         detached: true,
         env: process.env,
         stdio: "inherit",
+        windowsHide: true,
       }),
     );
   });

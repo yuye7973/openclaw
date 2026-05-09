@@ -1,3 +1,4 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   mapToolContextToSpawnedRunMetadata,
@@ -68,7 +69,7 @@ describe("resolveSpawnedWorkspaceInheritance", () => {
       targetAgentId: "ops",
       requesterSessionKey: "agent:main:subagent:parent",
     });
-    expect(resolved).toBe("/tmp/workspace-ops");
+    expect(resolved).toBe(path.resolve("/tmp/workspace-ops"));
   });
 
   it("falls back to requester session agent when targetAgentId is missing", () => {
@@ -76,7 +77,7 @@ describe("resolveSpawnedWorkspaceInheritance", () => {
       config,
       requesterSessionKey: "agent:main:subagent:parent",
     });
-    expect(resolved).toBe("/tmp/workspace-main");
+    expect(resolved).toBe(path.resolve("/tmp/workspace-main"));
   });
 
   it("returns undefined for missing requester context", () => {

@@ -1,0 +1,62 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_next_safe_task_proposer_fixture_coverage_report.v1",
+  "created_at": "2026-05-07T01:55:38.802Z",
+  "dry_run": true,
+  "read_only": true,
+  "source_next_safe_task_proposer_fixture": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-next-safe-task-proposer-fixture.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "coverage_pass",
+  "operation": "create",
+  "validation_status": "pass",
+  "failures": [],
+  "coverage": {
+    "required_fields_checked": [
+      "source_real_writer_activation_final_safety_summary_coverage_report",
+      "model_decision_boundary",
+      "proposed_next_task",
+      "proposed_next_task.required_validation",
+      "proposed_next_task.prohibited_actions",
+      "rollback_path",
+      "next_safe_task"
+    ],
+    "safety_flags_checked": [
+      "dry_run",
+      "read_only",
+      "fixture_only",
+      "operator_approved",
+      "real_writer_allowed",
+      "registry_write_allowed",
+      "taskflow_registry_write",
+      "sqlite_write",
+      "worker_execution",
+      "model_invoked",
+      "model_decision_boundary.model_invocation_allowed",
+      "model_decision_boundary.model_invoked"
+    ],
+    "proposer_fixture_ready": true,
+    "model_decision_reference_only": true,
+    "operator_approval_boundary_locked": true,
+    "proposed_next_task_complete": true,
+    "proposal_fingerprint_present": true,
+    "all_writes_disabled": true,
+    "coverage_ratio": 1
+  },
+  "operator_approved": false,
+  "real_writer_allowed": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "blocked_actions": [
+    "Task Flow registry write",
+    "SQLite registry mutation",
+    "worker execution from next safe task proposer fixture coverage report",
+    "model invocation during next safe task proposer fixture coverage report",
+    "creating the real Task Flow registry writer from proposer fixture coverage",
+    "treating proposer fixture coverage as operator approval",
+    "automatic promotion from proposer fixture coverage to executable task"
+  ],
+  "rollback_path": "Discard this read-only proposer fixture coverage report; it did not persist registry, SQLite, worker, model, or approval state.",
+  "next_safe_task": "Add a read-only next safe task proposer release summary without registry, SQLite, worker, or model execution."
+}

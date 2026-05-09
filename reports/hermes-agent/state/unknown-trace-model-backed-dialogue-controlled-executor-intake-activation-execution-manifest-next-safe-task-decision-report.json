@@ -1,0 +1,57 @@
+{
+  "schema": "openclaw.hermes.model_decision_intake_activation_execution_manifest_next_safe_task_decision_report.v1",
+  "created_at": "2026-05-08T00:18:54.326Z",
+  "dry_run": true,
+  "read_only": true,
+  "source_execution_manifest_final_readiness_summary_coverage_report": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-20260507165429-14052290-model-backed-dialogue-controlled-executor-intake-activation-execution-manifest-final-readiness-summary-coverage-report.json",
+  "source_execution_manifest_final_readiness_summary_report": "",
+  "source_execution_manifest_proposal_coverage_report": "",
+  "source_execution_manifest_proposal_report": "",
+  "source_final_readiness_summary_coverage_report": "",
+  "source_final_readiness_summary_report": "",
+  "source_preflight_coverage_report": "",
+  "source_preflight_report": "",
+  "source_release_summary_coverage_report": "",
+  "source_release_summary_report": "",
+  "source_intake_coverage_report": "",
+  "source_handoff_plan": "",
+  "trace_id": "unknown-trace",
+  "status": "blocked",
+  "validation_status": "fail",
+  "failures": [
+    "model-backed dialogue intake activation execution-manifest final readiness summary coverage report JSON parse failed: Unexpected non-whitespace character after JSON at position 4536 (line 61 column 2)"
+  ],
+  "decision": {
+    "next_task": "Prepare a read-only model-backed dialogue controlled executor intake activation execution-manifest next-safe-task decision coverage report.",
+    "reason": "execution-manifest final readiness summary coverage is green and all execution boundaries remain locked.",
+    "risk_level": "low",
+    "required_preconditions": [
+      "final readiness summary coverage status is coverage_pass",
+      "coverage_ratio equals 1",
+      "approval_required stays true and execution_start_allowed stays false",
+      "operator_approved/execution_started stay false",
+      "registry/sqlite/worker/model/live actions stay disabled"
+    ],
+    "boundary_enforced": false
+  },
+  "approval_required": true,
+  "execution_start_allowed": false,
+  "operator_approved": false,
+  "execution_started": false,
+  "registry_write_allowed": false,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "live_actions_enabled": false,
+  "blocked_actions": [
+    "treating execution-manifest next-safe-task decision report as operator approval",
+    "turning execution-manifest next-safe-task decision report into a registry writer",
+    "turning execution-manifest next-safe-task decision report into a SQLite writer",
+    "starting worker execution from execution-manifest next-safe-task decision report",
+    "calling a model from execution-manifest next-safe-task decision report",
+    "running live actions from execution-manifest next-safe-task decision report"
+  ],
+  "rollback_path": "Discard this read-only execution-manifest next-safe-task decision report; it did not persist registry, SQLite, worker, model, approval, or live-action state.",
+  "next_safe_task": "Fix the model-backed dialogue controlled executor intake activation execution-manifest final readiness summary coverage report before decision promotion."
+}

@@ -1,0 +1,20 @@
+{
+  "schema": "openclaw.capital.paper-hft-risk-controls.v1",
+  "mode": "paper",
+  "allowLiveTrading": false,
+  "writeBrokerOrders": false,
+  "requireManualLiveArm": true,
+  "requireQuoteArchitecturePassed": true,
+  "requireStrategyGateReady": true,
+  "requireFreshQuoteStatus": "fresh",
+  "maxDecisionQuoteAgeSeconds": 2,
+  "decisionLoopIntervalMs": 250,
+  "maxPaperIntentsPerSecond": 4,
+  "maxPaperIntentsPerMinute": 120,
+  "maxPositionContracts": 1,
+  "maxDailyPaperLossTwd": 3000,
+  "killSwitchRequired": true,
+  "paperLedgerRequired": true,
+  "allowedSymbols": ["MXFFX999", "TM*", "MTX*", "MX*", "TX*"],
+  "blockedOrderTypes": ["market-live", "broker-live", "oco-live"]
+}

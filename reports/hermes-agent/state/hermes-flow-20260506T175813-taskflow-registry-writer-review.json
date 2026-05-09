@@ -1,0 +1,40 @@
+{
+  "schema": "openclaw.hermes.taskflow_registry_writer_review.v1",
+  "created_at": "2026-05-06T20:18:54.201Z",
+  "dry_run": true,
+  "review_only": true,
+  "source_read_adapter": "D:\\OpenClaw\\reports\\hermes-agent\\state\\hermes-flow-20260506T175813-taskflow-registry-read-adapter.json",
+  "flow_id": "hermes-flow-20260506T175813",
+  "status": "manual_approval_required",
+  "requested_action": "review_future_taskflow_registry_write",
+  "operation": "create",
+  "registry_snapshot_required": true,
+  "operator_approval_required": true,
+  "taskflow_registry_write": false,
+  "sqlite_write": false,
+  "worker_execution": false,
+  "model_invoked": false,
+  "validation_status": "pass",
+  "failures": [],
+  "proposed_write": {
+    "flow_id": "hermes-flow-20260506T175813",
+    "sync_mode": "managed",
+    "registry_target": "task_flow_registry",
+    "operation": "create",
+    "expected_current_state": "missing",
+    "rollback_path": "Do not write the Task Flow registry; discard this review artifact and return to the read adapter artifact."
+  },
+  "approval_requirements": [
+    "read adapter validation_status must be pass",
+    "registry_snapshot_read must be true",
+    "comparison must be would_create_flow or would_update_flow",
+    "operator must approve before any future registry writer exists"
+  ],
+  "blocked_actions": [
+    "automatic Task Flow registry write",
+    "SQLite registry mutation",
+    "worker execution from writer review",
+    "model invocation during writer review"
+  ],
+  "next_safe_task": "Add a final no-op writer apply gate that still keeps Task Flow registry writes disabled."
+}

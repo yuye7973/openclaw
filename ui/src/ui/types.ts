@@ -666,7 +666,7 @@ export type SkillsStatusConfigCheck = {
 
 export type SkillInstallOption = {
   id: string;
-  kind: "brew" | "node" | "go" | "uv";
+  kind: "brew" | "node" | "go" | "uv" | "download";
   label: string;
   bins: string[];
 };
@@ -685,7 +685,11 @@ export type SkillStatusEntry = {
   always: boolean;
   disabled: boolean;
   blockedByAllowlist: boolean;
+  blockedByAgentFilter?: boolean;
   eligible: boolean;
+  modelVisible?: boolean;
+  userInvocable?: boolean;
+  commandVisible?: boolean;
   requirements: {
     bins: string[];
     env: string[];
@@ -700,11 +704,19 @@ export type SkillStatusEntry = {
   };
   configChecks: SkillsStatusConfigCheck[];
   install: SkillInstallOption[];
+  agentInterface?: {
+    displayName: string;
+    shortDescription?: string;
+    defaultPrompt?: string;
+    filePath: string;
+  };
 };
 
 export type SkillStatusReport = {
   workspaceDir: string;
   managedSkillsDir: string;
+  agentId?: string;
+  agentSkillFilter?: string[];
   skills: SkillStatusEntry[];
 };
 
