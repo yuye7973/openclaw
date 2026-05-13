@@ -15,7 +15,6 @@ export type PreparedSlackMessage = {
   replyTarget: string;
   ctxPayload: FinalizedMsgContext;
   turn: {
-    storePath: string;
     record: unknown;
     history?: {
       isGroup?: boolean;

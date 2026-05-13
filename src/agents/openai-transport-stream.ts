@@ -1,15 +1,4 @@
 import { randomUUID } from "node:crypto";
-import type { StreamFn } from "@earendil-works/pi-agent-core";
-import {
-  calculateCost,
-  createAssistantMessageEventStream,
-  getEnvApiKey,
-  parseStreamingJson,
-  type Api,
-  type Context,
-  type Model,
-} from "@earendil-works/pi-ai";
-import { convertMessages } from "@earendil-works/pi-ai/openai-completions";
 import OpenAI, { AzureOpenAI } from "openai";
 import type { ChatCompletionChunk } from "openai/resources/chat/completions.js";
 import type {
@@ -28,6 +17,7 @@ import { redactSensitiveText } from "../logging/redact.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import type { ProviderRuntimeModel } from "../plugins/provider-runtime-model.types.js";
 import { resolveProviderTransportTurnStateWithPlugin } from "../plugins/provider-runtime.js";
+import type { StreamFn } from "./agent-core-contract.js";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./copilot-dynamic-headers.js";
 import { createDeepSeekTextFilter } from "./deepseek-text-filter.js";
 import { resolveMaxTokensParam } from "./model-max-tokens-params.js";
@@ -60,6 +50,16 @@ import {
   resolveOpenAIStrictToolFlagForInventory,
   resolveOpenAIStrictToolSetting,
 } from "./openai-tool-schema.js";
+import {
+  calculateCost,
+  createAssistantMessageEventStream,
+  getEnvApiKey,
+  parseStreamingJson,
+  type Api,
+  type Context,
+  type Model,
+} from "./pi-ai-contract.js";
+import { convertMessages } from "./pi-ai-openai-completions-contract.js";
 import { resolveProviderRequestPolicyConfig } from "./provider-request-config.js";
 import {
   buildGuardedModelFetch,
@@ -247,7 +247,7 @@ function responseInputRoles(input: unknown): string {
       }
     }
   }
-  return [...roles].toSorted().join(",");
+  return [...roles].toSorted((a, b) => a.localeCompare(b)).join(",");
 }
 
 function readResponsesToolDisplayName(tool: unknown): string {
@@ -304,7 +304,7 @@ function assertCodeModeResponsesToolSurface(payload: unknown): void {
   }
   const names = payload.tools
     .map(responsesPayloadToolName)
-    .filter((name): name is string => typeof name === "string" && name.length > 0)
+    .filter((name): name is string => Boolean(name))
     .toSorted((a, b) => a.localeCompare(b));
   if (names.length === 2 && names[0] === "exec" && names[1] === "wait") {
     return;
@@ -349,7 +349,9 @@ function summarizeResponsesPayload(params: unknown): string {
       ? (record.text as Record<string, unknown>)
       : undefined;
   const parts = [
-    `fields=${Object.keys(record).toSorted().join(",")}`,
+    `fields=${Object.keys(record)
+      .toSorted((a, b) => a.localeCompare(b))
+      .join(",")}`,
     `model=${safeDebugValue(record.model)}`,
     `stream=${safeDebugValue(record.stream)}`,
     `inputItems=${Array.isArray(input) ? input.length : typeof input}`,
@@ -364,7 +366,9 @@ function summarizeResponsesPayload(params: unknown): string {
     `promptCacheKey=${record.prompt_cache_key === undefined ? "absent" : "present"}`,
     `metadataKeys=${
       record.metadata && typeof record.metadata === "object"
-        ? Object.keys(record.metadata).toSorted().join(",")
+        ? Object.keys(record.metadata)
+            .toSorted((a, b) => a.localeCompare(b))
+            .join(",")
         : "none"
     }`,
   ];

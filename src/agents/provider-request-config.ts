@@ -1,4 +1,3 @@
-import type { Api } from "@earendil-works/pi-ai";
 import type { ModelDefinitionConfig } from "../config/types.js";
 import type {
   ConfiguredModelProviderRequest,
@@ -7,6 +6,7 @@ import type {
 import { assertSecretInputResolved } from "../config/types.secrets.js";
 import type { PinnedDispatcherPolicy } from "../infra/net/ssrf.js";
 import { normalizeLowercaseStringOrEmpty } from "../shared/string-coerce.js";
+import type { Api } from "./pi-ai-contract.js";
 import type {
   ProviderRequestCapabilities,
   ProviderRequestCapability,

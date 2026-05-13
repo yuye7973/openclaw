@@ -11,7 +11,7 @@ import { createChannelHistoryWindow } from "openclaw/plugin-sdk/reply-history";
 import { buildAgentSessionKey, resolveThreadSessionKeys } from "openclaw/plugin-sdk/routing";
 import { danger, logVerbose, shouldLogVerbose } from "openclaw/plugin-sdk/runtime-env";
 import { evaluateSupplementalContextVisibility } from "openclaw/plugin-sdk/security-runtime";
-import { readSessionUpdatedAt, resolveStorePath } from "openclaw/plugin-sdk/session-store-runtime";
+import { readSessionUpdatedAt } from "openclaw/plugin-sdk/session-store-runtime";
 import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
 import { resolveDiscordConversationIdentity } from "../conversation-identity.js";
 import { ChannelType } from "../internal/discord.js";
@@ -142,12 +142,9 @@ export async function buildDiscordMessageProcessContext(params: {
     allowNameMatching,
     isGuild: isGuildMessage,
   });
-  const storePath = resolveStorePath(cfg.session?.store, {
-    agentId: route.agentId,
-  });
   const envelopeOptions = resolveEnvelopeFormatOptions(cfg);
   const previousTimestamp = readSessionUpdatedAt({
-    storePath,
+    agentId: route.agentId,
     sessionKey: route.sessionKey,
   });
   const channelHistory = createChannelHistoryWindow({ historyMap: guildHistories });
@@ -323,7 +320,7 @@ export async function buildDiscordMessageProcessContext(params: {
     effectiveSessionKey === route.sessionKey
       ? previousTimestamp
       : readSessionUpdatedAt({
-          storePath,
+          agentId: route.agentId,
           sessionKey: effectiveSessionKey,
         });
 
@@ -435,7 +432,6 @@ export async function buildDiscordMessageProcessContext(params: {
     ctxPayload,
     persistedSessionKey,
     turn: {
-      storePath,
       record: {
         updateLastRoute: {
           sessionKey: persistedSessionKey,

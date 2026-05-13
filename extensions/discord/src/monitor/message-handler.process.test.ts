@@ -164,12 +164,8 @@ const recordInboundSession = vi.hoisted(() =>
 );
 const configSessionsMocks = vi.hoisted(() => ({
   readSessionUpdatedAt: vi.fn<(params?: unknown) => number | undefined>(() => undefined),
-  resolveStorePath: vi.fn<(path?: unknown, opts?: unknown) => string>(
-    () => "/tmp/openclaw-discord-process-test-sessions.json",
-  ),
 }));
 const readSessionUpdatedAt = configSessionsMocks.readSessionUpdatedAt;
-const resolveStorePath = configSessionsMocks.resolveStorePath;
 const createDiscordRestClientSpy = vi.hoisted(() =>
   vi.fn<
     (params: unknown) => {
@@ -263,7 +259,6 @@ vi.mock("openclaw/plugin-sdk/conversation-runtime", () => ({
 
 vi.mock("openclaw/plugin-sdk/session-store-runtime", () => ({
   readSessionUpdatedAt: (...args: unknown[]) => configSessionsMocks.readSessionUpdatedAt(...args),
-  resolveStorePath: (...args: unknown[]) => configSessionsMocks.resolveStorePath(...args),
 }));
 
 vi.mock("../client.js", () => ({
@@ -354,12 +349,10 @@ beforeEach(() => {
   dispatchInboundMessage.mockClear();
   recordInboundSession.mockClear();
   readSessionUpdatedAt.mockClear();
-  resolveStorePath.mockClear();
   createDiscordRestClientSpy.mockClear();
   dispatchInboundMessage.mockResolvedValue(createNoQueuedDispatchResult());
   recordInboundSession.mockResolvedValue(undefined);
   readSessionUpdatedAt.mockReturnValue(undefined);
-  resolveStorePath.mockReturnValue("/tmp/openclaw-discord-process-test-sessions.json");
   threadBindingTesting.resetThreadBindingsForTests();
 });
 
@@ -893,7 +886,7 @@ describe("processDiscordMessage ack reactions", () => {
             timing: { debounceMs: 0 },
           },
         },
-        session: { store: "/tmp/openclaw-discord-process-test-sessions.json" },
+        session: {},
       },
     });
 
@@ -919,7 +912,7 @@ describe("processDiscordMessage ack reactions", () => {
             timing: { debounceMs: 0 },
           },
         },
-        session: { store: "/tmp/openclaw-discord-process-test-sessions.json" },
+        session: {},
       },
     });
 
@@ -946,7 +939,7 @@ describe("processDiscordMessage ack reactions", () => {
             timing: { debounceMs: 0 },
           },
         },
-        session: { store: "/tmp/openclaw-discord-process-test-sessions.json" },
+        session: {},
       },
     });
 
@@ -974,7 +967,7 @@ describe("processDiscordMessage ack reactions", () => {
           ackReaction: "👀",
           removeAckAfterReply: true,
         },
-        session: { store: "/tmp/openclaw-discord-process-test-sessions.json" },
+        session: {},
       },
     });
 
@@ -998,7 +991,7 @@ describe("processDiscordMessage ack reactions", () => {
             enabled: false,
           },
         },
-        session: { store: "/tmp/openclaw-discord-process-test-sessions.json" },
+        session: {},
       },
     });
 
@@ -1154,7 +1147,6 @@ describe("processDiscordMessage session routing", () => {
       cfg: {
         messages: { ackReaction: "👀" },
         session: {
-          store: "/tmp/openclaw-discord-process-test-sessions.json",
           dmScope: "main",
         },
       },
@@ -1242,7 +1234,7 @@ describe("processDiscordMessage session routing", () => {
             timing: { debounceMs: 0 },
           },
         },
-        session: { store: "/tmp/openclaw-discord-process-test-sessions.json" },
+        session: {},
       },
       route: BASE_CHANNEL_ROUTE,
     });
@@ -1274,7 +1266,7 @@ describe("processDiscordMessage session routing", () => {
             timing: { debounceMs: 0 },
           },
         },
-        session: { store: "/tmp/openclaw-discord-process-test-sessions.json" },
+        session: {},
       },
       route: BASE_CHANNEL_ROUTE,
     });
@@ -1331,7 +1323,7 @@ describe("processDiscordMessage session routing", () => {
               visibleReplies: "automatic",
             },
           },
-          session: { store: "/tmp/openclaw-discord-process-test-sessions.json" },
+          session: {},
         },
         route: BASE_CHANNEL_ROUTE,
       }),
@@ -1480,7 +1472,7 @@ describe("processDiscordMessage draft streaming", () => {
     return await createAutomaticSourceDeliveryContext({
       cfg: {
         messages: { ackReaction: "👀" },
-        session: { store: "/tmp/openclaw-discord-process-test-sessions.json" },
+        session: {},
         channels: {
           discord: {
             draftChunk: { minChars: 1, maxChars: 5, breakPreference: "newline" },
@@ -1580,7 +1572,7 @@ describe("processDiscordMessage draft streaming", () => {
     const ctx = await createAutomaticSourceDeliveryContext({
       cfg: {
         messages: { ackReaction: "👀" },
-        session: { store: "/tmp/openclaw-discord-process-test-sessions.json" },
+        session: {},
         channels: {
           discord: {
             maxLinesPerMessage: 120,

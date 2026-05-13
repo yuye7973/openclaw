@@ -1099,7 +1099,6 @@ describe("loadGatewayPlugins", () => {
     await expect(
       runtime.deleteSession({
         sessionKey: "s-delete",
-        deleteTranscript: true,
       }),
     ).rejects.toThrow("missing scope: operator.admin");
 
@@ -1129,7 +1128,6 @@ describe("loadGatewayPlugins", () => {
       gatewayRequestScopeModule.withPluginRuntimePluginIdScope("memory-core", () =>
         runtime.deleteSession({
           sessionKey: "dreaming-narrative-light-workspace-1",
-          deleteTranscript: true,
         }),
       ),
     ).resolves.toBeUndefined();
@@ -1155,7 +1153,6 @@ describe("loadGatewayPlugins", () => {
       gatewayRequestScopeModule.withPluginRuntimeGatewayRequestScope(scope, () =>
         runtime.deleteSession({
           sessionKey: "s-delete-admin",
-          deleteTranscript: true,
         }),
       ),
     ).resolves.toBeUndefined();
@@ -1181,7 +1178,6 @@ describe("loadGatewayPlugins", () => {
         gatewayRequestScopeModule.withPluginRuntimePluginIdScope("memory-core", () =>
           runtime.deleteSession({
             sessionKey: "dreaming-narrative-light-workspace-1",
-            deleteTranscript: true,
           }),
         ),
       ),
