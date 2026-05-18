@@ -7,7 +7,11 @@ import {
   resolveSessionAgentId,
   resolveAgentSkillsFilter,
 } from "../../agents/agent-scope.js";
-import { modelKey, resolveModelRefFromString } from "../../agents/model-selection.js";
+import {
+  modelKey,
+  type ModelManifestNormalizationContext,
+  resolveModelRefFromString,
+} from "../../agents/model-selection.js";
 import { resolveAgentTimeoutMs } from "../../agents/timeout.js";
 import { DEFAULT_AGENT_WORKSPACE_DIR, ensureAgentWorkspace } from "../../agents/workspace.js";
 import { resolveChannelModelOverride } from "../../channels/model-overrides.js";
@@ -16,6 +20,7 @@ import { logVerbose } from "../../globals.js";
 import { measureDiagnosticsTimelineSpan } from "../../infra/diagnostics-timeline.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import { buildAgentHookContextChannelFields } from "../../plugins/hook-agent-context.js";
+import { loadManifestMetadataSnapshot } from "../../plugins/manifest-contract-eligibility.js";
 import { defaultRuntime } from "../../runtime.js";
 import { createLazyImportLoader } from "../../shared/lazy-promise.js";
 import { normalizeOptionalString } from "../../shared/string-coerce.js";
@@ -55,6 +60,12 @@ import {
 import { createTypingController } from "./typing.js";
 
 type ResetCommandAction = "new" | "reset";
+
+function hasConfiguredProviderModels(cfg: OpenClawConfig): boolean {
+  return Object.values(cfg.models?.providers ?? {}).some(
+    (provider) => Array.isArray(provider.models) && provider.models.length > 0,
+  );
+}
 
 function classifyHeartbeatPendingFinalDelivery(text: string, ackMaxChars: number) {
   const stripped = stripHeartbeatToken(text, {
@@ -248,21 +259,49 @@ export async function getReplyFromConfig(
     mergedSkillFilter !== undefined ? { ...opts, skillFilter: mergedSkillFilter } : opts;
   const agentCfg = cfg.agents?.defaults;
   const sessionCfg = cfg.session;
+  const workspaceDirRaw = resolveAgentWorkspaceDir(cfg, agentId) ?? DEFAULT_AGENT_WORKSPACE_DIR;
+  const agentDir = resolveAgentDir(cfg, agentId);
+  const modelOverrideRaw = normalizeOptionalString(opts?.modelOverride);
+  const heartbeatModelRaw =
+    opts?.isHeartbeat === true
+      ? (normalizeOptionalString(opts.heartbeatModelOverride) ??
+        normalizeOptionalString(agentCfg?.heartbeat?.model))
+      : undefined;
+  const agentEntryForModel = resolveAgentConfig(cfg, agentId);
+  const shouldPreloadModelManifestContext = Boolean(
+    modelOverrideRaw ||
+      heartbeatModelRaw ||
+      agentEntryForModel?.model ||
+      cfg.agents?.defaults?.model ||
+      Object.keys(cfg.agents?.defaults?.models ?? {}).length > 0 ||
+      hasConfiguredProviderModels(cfg),
+  );
+  const modelManifestContext: ModelManifestNormalizationContext =
+    shouldPreloadModelManifestContext
+      ? {
+          manifestPlugins: loadManifestMetadataSnapshot({
+            config: cfg,
+            workspaceDir: workspaceDirRaw,
+            env: process.env,
+          }).plugins,
+        }
+      : {};
   const { defaultProvider, defaultModel, aliasIndex } = resolveDefaultModel({
     cfg,
     agentId,
+    ...modelManifestContext,
   });
   let provider = defaultProvider;
   let model = defaultModel;
   let hasResolvedHeartbeatModelOverride = false;
   let hasAppliedImageModelOverride = false;
   let imageModelFallbacksOverride: string[] | undefined;
-  const modelOverrideRaw = normalizeOptionalString(opts?.modelOverride);
   if (modelOverrideRaw) {
     const modelOverrideRef = resolveModelRefFromString({
       raw: modelOverrideRaw,
       defaultProvider,
       aliasIndex,
+      ...modelManifestContext,
     });
     if (modelOverrideRef) {
       provider = modelOverrideRef.ref.provider;
@@ -279,15 +318,12 @@ export async function getReplyFromConfig(
   } else if (opts?.isHeartbeat) {
     // Prefer the resolved per-agent heartbeat model passed from the heartbeat runner,
     // fall back to the global defaults heartbeat model for backward compatibility.
-    const heartbeatRaw =
-      normalizeOptionalString(opts.heartbeatModelOverride) ??
-      normalizeOptionalString(agentCfg?.heartbeat?.model) ??
-      "";
-    const heartbeatRef = heartbeatRaw
+    const heartbeatRef = heartbeatModelRaw
       ? resolveModelRefFromString({
-          raw: heartbeatRaw,
+          raw: heartbeatModelRaw,
           defaultProvider,
           aliasIndex,
+          ...modelManifestContext,
         })
       : null;
     if (heartbeatRef) {
@@ -297,9 +333,7 @@ export async function getReplyFromConfig(
     }
   }
 
-  const workspaceDirRaw = resolveAgentWorkspaceDir(cfg, agentId) ?? DEFAULT_AGENT_WORKSPACE_DIR;
   const workspaceDirForNativeCommand = workspaceDirRaw;
-  const agentDir = resolveAgentDir(cfg, agentId);
   const timeoutMs = resolveAgentTimeoutMs({ cfg, overrideSeconds: opts?.timeoutOverrideSeconds });
   const configuredTypingSeconds =
     agentCfg?.typingIntervalSeconds ?? sessionCfg?.typingIntervalSeconds;
@@ -333,6 +367,7 @@ export async function getReplyFromConfig(
         typing,
         opts: resolvedOpts,
         skillFilter: mergedSkillFilter,
+        ...modelManifestContext,
       }),
   );
   if (nativeSlashCommandFastReply.handled) {
@@ -523,6 +558,7 @@ export async function getReplyFromConfig(
           raw: channelModelOverride.model,
           defaultProvider,
           aliasIndex,
+          ...modelManifestContext,
         })
       : null;
   const primaryProvider = resolvedChannelModelOverride?.ref.provider ?? defaultProvider;
@@ -716,6 +752,7 @@ export async function getReplyFromConfig(
       typing,
       opts: resolvedOpts,
       skillFilter: mergedSkillFilter,
+      ...modelManifestContext,
     }),
   );
   if (directiveResult.kind === "reply") {
@@ -855,6 +892,7 @@ export async function getReplyFromConfig(
       skipStoredModelOverride: true,
       hasResolvedHeartbeatModelOverride,
       isHeartbeat: opts?.isHeartbeat === true,
+      ...modelManifestContext,
     });
     const hasExplicitThinkLevel =
       resolvedOpts?.thinkingLevelOverride !== undefined ||

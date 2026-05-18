@@ -39,6 +39,7 @@ Docs: https://docs.openclaw.ai
 ### Fixes
 
 - Codex app-server: preserve network access for sandboxed Codex code-mode turns when the OpenClaw sandbox allows outbound egress. Fixes #83347. Thanks @YusukeIt0.
+- Replies: reuse per-turn manifest model-normalization metadata across reply default-model and model-selection paths to avoid repeated request-time plugin metadata scans.
 - Plugins: reuse the Gateway's current metadata snapshot for agent workspaces without local plugins, avoiding repeated request-time manifest scans while preserving workspace plugin overrides.
 - QA-Lab: disable background agent heartbeats in WhatsApp live probes so RTT artifacts measure the canary reply lane without heartbeat contention.
 - Replies: skip provider thinking-catalog hydration when thinking is off so messaging replies avoid unnecessary model-runtime setup before dispatch.

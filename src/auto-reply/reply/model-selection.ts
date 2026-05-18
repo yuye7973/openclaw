@@ -14,6 +14,7 @@ import {
   resolveReasoningDefault,
   resolveThinkingDefault,
 } from "../../agents/model-selection.js";
+import type { ModelManifestNormalizationContext } from "../../agents/model-selection-normalize.js";
 import {
   createModelVisibilityPolicy,
   type ModelVisibilityPolicy,
@@ -109,7 +110,7 @@ export async function createModelSelectionState(params: {
    *  In that case, skip session-stored overrides so the heartbeat selection wins. */
   hasResolvedHeartbeatModelOverride?: boolean;
   isHeartbeat?: boolean;
-}): Promise<ModelSelectionState> {
+} & ModelManifestNormalizationContext): Promise<ModelSelectionState> {
   const timingEnabled = shouldLogModelSelectionTiming();
   const startMs = timingEnabled ? Date.now() : 0;
   const logStage = (stage: string, extra?: string) => {
@@ -144,7 +145,10 @@ export async function createModelSelectionState(params: {
   const defaultProviderVisibleByWildcard = visibility.providerWildcards.has(
     normalizeProviderId(defaultProvider),
   );
-  const configuredModelCatalog = buildConfiguredModelCatalog({ cfg });
+  const configuredModelCatalog = buildConfiguredModelCatalog({
+    cfg,
+    manifestPlugins: params.manifestPlugins,
+  });
   const needsModelCatalog =
     params.hasModelDirective ||
     Boolean(
@@ -159,6 +163,7 @@ export async function createModelSelectionState(params: {
     defaultProvider,
     defaultModel,
     agentId: params.agentId,
+    manifestPlugins: params.manifestPlugins,
   });
   let modelCatalog: ModelCatalog | null = null;
   let resetModelOverride = false;
@@ -192,6 +197,7 @@ export async function createModelSelectionState(params: {
       defaultProvider,
       defaultModel,
       agentId: params.agentId,
+      manifestPlugins: params.manifestPlugins,
     });
     allowedModelCatalog = visibilityPolicy.allowedCatalog;
     allowedModelKeys = visibilityPolicy.allowedKeys;
@@ -206,6 +212,7 @@ export async function createModelSelectionState(params: {
       defaultProvider,
       defaultModel,
       agentId: params.agentId,
+      manifestPlugins: params.manifestPlugins,
     });
     allowedModelCatalog = visibilityPolicy.allowedCatalog;
     allowedModelKeys = visibilityPolicy.allowedKeys;
@@ -227,6 +234,7 @@ export async function createModelSelectionState(params: {
     const normalizedOverride = normalizeModelRef(
       directStoredOverride.provider,
       directStoredOverride.model,
+      { manifestPlugins: params.manifestPlugins },
     );
     const key = modelKey(normalizedOverride.provider, normalizedOverride.model);
     if (staleHeartbeatAutoFallbackOverride || !visibilityPolicy.allowsKey(key)) {
@@ -252,13 +260,17 @@ export async function createModelSelectionState(params: {
     }
   }
   if (staleHeartbeatAutoFallbackOverride) {
-    const normalizedCurrentSelection = normalizeModelRef(provider, model);
+    const normalizedCurrentSelection = normalizeModelRef(provider, model, {
+      manifestPlugins: params.manifestPlugins,
+    });
     const currentSelectionKey = modelKey(
       normalizedCurrentSelection.provider,
       normalizedCurrentSelection.model,
     );
     const normalizedDirectOverride = directStoredOverride
-      ? normalizeModelRef(directStoredOverride.provider, directStoredOverride.model)
+      ? normalizeModelRef(directStoredOverride.provider, directStoredOverride.model, {
+          manifestPlugins: params.manifestPlugins,
+        })
       : null;
     const directStoredOverrideKey = normalizedDirectOverride
       ? modelKey(normalizedDirectOverride.provider, normalizedDirectOverride.model)
@@ -290,6 +302,7 @@ export async function createModelSelectionState(params: {
     const normalizedStoredOverride = normalizeModelRef(
       storedOverride.provider || defaultProvider,
       storedOverride.model,
+      { manifestPlugins: params.manifestPlugins },
     );
     const key = modelKey(normalizedStoredOverride.provider, normalizedStoredOverride.model);
     if (visibilityPolicy.allowsKey(key)) {
