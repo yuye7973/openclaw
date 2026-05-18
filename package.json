@@ -1,6 +1,6 @@
 {
   "name": "openclaw",
-  "version": "2026.5.17",
+  "version": "2026.5.18-alpha.1",
   "description": "Multi-channel AI gateway with extensible messaging integrations",
   "keywords": [],
   "homepage": "https://github.com/openclaw/openclaw#readme",
@@ -1802,8 +1802,8 @@
     "tokenjuice": "0.7.1",
     "tree-sitter-bash": "0.25.1",
     "tslog": "4.10.2",
-    "typescript": "6.0.3",
     "typebox": "1.1.38",
+    "typescript": "6.0.3",
     "undici": "8.3.0",
     "web-push": "3.6.7",
     "web-tree-sitter": "0.26.8",
