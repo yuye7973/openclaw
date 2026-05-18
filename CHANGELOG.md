@@ -40,6 +40,7 @@ Docs: https://docs.openclaw.ai
 
 - Codex app-server: preserve network access for sandboxed Codex code-mode turns when the OpenClaw sandbox allows outbound egress. Fixes #83347. Thanks @YusukeIt0.
 - QA-Lab: skip WhatsApp live QA agent workspace bootstrap and record per-scenario phase timings, RSS samples, and complete gateway heap checkpoints so channel RTT artifacts isolate send, wait, startup, readiness, and retained-memory cost.
+- WhatsApp: skip eager participating-group metadata hydration for DM-only sessions so reconnects avoid unnecessary startup memory and RTT pressure.
 - QA-Lab: keep the OTLP smoke decoder independent of removed OpenTelemetry generated-root internals.
 - Messages: default group/channel visible replies to automatic final delivery again, keeping `message_tool` opt-in for ambient/shared rooms and tool-reliable models.
 - Agents/code mode: preserve agent, session, run, and channel context in `before_tool_call` hooks for top-level `exec`/`wait` dispatches. Fixes #83387.
