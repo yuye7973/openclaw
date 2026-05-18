@@ -39,6 +39,7 @@ Docs: https://docs.openclaw.ai
 ### Fixes
 
 - Codex app-server: preserve network access for sandboxed Codex code-mode turns when the OpenClaw sandbox allows outbound egress. Fixes #83347. Thanks @YusukeIt0.
+- QA-Lab: disable background agent heartbeats in WhatsApp live probes so RTT artifacts measure the canary reply lane without heartbeat contention.
 - Replies: skip provider thinking-catalog hydration when thinking is off so messaging replies avoid unnecessary model-runtime setup before dispatch.
 - Providers: reuse already-loaded provider runtime hooks for synthetic auth before falling back to provider discovery loads.
 - QA-Lab: include the gateway diagnostic timeline in WhatsApp live trace artifacts so RTT probes expose reply setup, compaction, and model-run phase costs.
