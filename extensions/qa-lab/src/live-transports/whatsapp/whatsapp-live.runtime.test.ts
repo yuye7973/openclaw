@@ -136,7 +136,19 @@ describe("WhatsApp QA live runtime", () => {
     expect(scenarioRun.input).not.toContain("visible reply tool check");
 
     const cfg = __testing.buildWhatsAppQaConfig(
-      {},
+      {
+        agents: {
+          defaults: {
+            models: {
+              "openai/gpt-5.5": {
+                params: {
+                  thinking: "high",
+                },
+              },
+            },
+          },
+        },
+      },
       {
         allowFrom: ["+15550000001"],
         authDir: "/tmp/openclaw-whatsapp-qa-auth",
@@ -147,6 +159,7 @@ describe("WhatsApp QA live runtime", () => {
     );
     expect(cfg.agents?.defaults?.skipBootstrap).toBe(true);
     expect(cfg.agents?.defaults?.thinkingDefault).toBe("off");
+    expect(cfg.agents?.defaults?.models?.["openai/gpt-5.5"]?.params?.thinking).toBe("off");
     expect(cfg.messages?.groupChat?.visibleReplies).toBe("automatic");
     expect(cfg.messages?.groupChat?.mentionPatterns).toContain("\\bopenclawqa\\b");
   });
