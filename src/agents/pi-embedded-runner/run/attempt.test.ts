@@ -14,6 +14,7 @@ import {
   buildContextEnginePromptCacheInfo,
   buildAutoAddedToolSearchControlNamesForAllowlistCheck,
   buildCallableToolNamesForEmptyAllowlistCheck,
+  resolveAttemptConstructionToolsAllow,
   buildToolSearchRunPlan,
   buildAfterTurnRuntimeContext,
   buildAfterTurnRuntimeContextFromUsage,
@@ -127,6 +128,34 @@ describe("buildEmbeddedAttemptToolRunContext", () => {
     expect(context.jobId).toBe("job-1");
     expect(context.memoryFlushWritePath).toBe("memory/log.md");
     expect(context.runtimeToolAllowlist).toEqual(["memory_search", "memory_get"]);
+  });
+});
+
+describe("resolveAttemptConstructionToolsAllow", () => {
+  it("uses the active messaging profile to prune construction before tool factories run", () => {
+    const config: OpenClawConfig = {
+      tools: {
+        profile: "messaging",
+        deny: ["bundle-mcp", "session_status", "sessions_*"],
+      },
+    };
+
+    expect(
+      resolveAttemptConstructionToolsAllow({
+        config,
+        modelProvider: "openai",
+        modelId: "gpt-5.5",
+      }),
+    ).toEqual(["message"]);
+  });
+
+  it("keeps runtime toolsAllow authoritative", () => {
+    expect(
+      resolveAttemptConstructionToolsAllow({
+        config: { tools: { profile: "messaging" } },
+        runtimeToolsAllow: ["read"],
+      }),
+    ).toEqual(["read"]);
   });
 });
 
