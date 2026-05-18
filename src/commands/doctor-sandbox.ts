@@ -82,6 +82,44 @@ async function isDockerAvailable(): Promise<boolean> {
   }
 }
 
+async function probeCodexBwrapNamespaces(): Promise<{ ok: true } | { ok: false; reason: string }> {
+  if (process.platform !== "linux") {
+    return { ok: true };
+  }
+  try {
+    await runExec("unshare", ["--user", "--map-root-user", "--net", "true"], {
+      timeoutMs: 5_000,
+    });
+    return { ok: true };
+  } catch (error) {
+    const reason =
+      (error as { stderr?: string } | undefined)?.stderr?.trim() ||
+      (error as { stdout?: string } | undefined)?.stdout?.trim() ||
+      (error instanceof Error ? error.message : String(error));
+    return { ok: false, reason };
+  }
+}
+
+async function noteCodexBwrapNamespaceWarning(): Promise<void> {
+  const probe = await probeCodexBwrapNamespaces();
+  if (probe.ok) {
+    return;
+  }
+  const lines = [
+    "Codex bwrap namespace probe failed while Docker sandbox mode is enabled.",
+    "Codex app-server `workspace-write` shell execution needs unprivileged user and network namespaces.",
+    "On Ubuntu/AppArmor hosts this usually appears as:",
+    "  bwrap: setting up uid map: Permission denied",
+    "  bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted",
+    `Probe result: ${probe.reason}`,
+    "",
+    "Fix the host namespace policy for the OpenClaw service user, then restart the gateway.",
+    "Ubuntu/AppArmor systems commonly need `kernel.apparmor_restrict_unprivileged_userns=0` or an equivalent AppArmor profile that allows unprivileged user namespaces.",
+    "Do not add broad Docker container privileges just to satisfy nested bwrap; that weakens the outer sandbox.",
+  ];
+  note(lines.join("\n"), "Sandbox");
+}
+
 async function dockerImageExists(image: string): Promise<boolean> {
   try {
     await runExec("docker", ["image", "inspect", image], { timeoutMs: 5_000 });
@@ -227,6 +265,7 @@ export async function maybeRepairSandboxImages(
     note(lines.join("\n"), "Sandbox");
     return cfg;
   }
+  await noteCodexBwrapNamespaceWarning();
 
   let next = cfg;
   const changes: string[] = [];

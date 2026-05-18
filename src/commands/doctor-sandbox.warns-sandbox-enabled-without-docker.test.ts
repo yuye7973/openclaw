@@ -131,6 +131,36 @@ describe("maybeRepairSandboxImages", () => {
     );
     expect(dockerUnavailableWarning).toBeUndefined();
   });
+
+  it("warns when Codex bwrap namespaces are blocked on a sandboxed Linux host", async () => {
+    const platformSpy = vi.spyOn(process, "platform", "get").mockReturnValue("linux");
+    runExec.mockImplementation(async (command: string, args: string[]) => {
+      if (command === "docker" && args[0] === "version") {
+        return { stdout: "24.0.0", stderr: "" };
+      }
+      if (command === "unshare") {
+        throw Object.assign(new Error("unshare failed"), {
+          stderr: "unshare: write failed /proc/self/uid_map: Operation not permitted",
+        });
+      }
+      return { stdout: "", stderr: "" };
+    });
+
+    try {
+      await maybeRepairSandboxImages(createSandboxConfig("all"), mockRuntime, mockPrompter);
+    } finally {
+      platformSpy.mockRestore();
+    }
+
+    expect(note).toHaveBeenCalledWith(
+      expect.stringContaining("Codex bwrap namespace probe failed"),
+      "Sandbox",
+    );
+    expect(note).toHaveBeenCalledWith(
+      expect.stringContaining("kernel.apparmor_restrict_unprivileged_userns=0"),
+      "Sandbox",
+    );
+  });
 });
 
 describe("maybeRepairSandboxRegistryFiles", () => {

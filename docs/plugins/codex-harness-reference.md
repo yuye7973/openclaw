@@ -154,6 +154,14 @@ from the OpenClaw sandbox egress setting: Docker `network: "none"` stays
 offline, while `network: "bridge"` or a custom Docker network permits outbound
 access.
 
+On Ubuntu/AppArmor hosts, Codex bwrap can fail under `workspace-write` before
+the shell command starts. If you see
+`bwrap: setting up uid map: Permission denied` or
+`bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`, run
+`openclaw doctor` and fix the reported host namespace policy for the
+OpenClaw service user rather than granting broader Docker container
+privileges.
+
 ## Auth and environment isolation
 
 Auth is selected in this order:
