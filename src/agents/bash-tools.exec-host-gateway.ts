@@ -378,7 +378,7 @@ export async function processGatewayAllowlist(
     ask: params.ask,
     host: "gateway",
   });
-  const allowlistEval = evaluateShellAllowlist({
+  const allowlistEval = await evaluateShellAllowlist({
     command: params.command,
     allowlist: approvals.allowlist,
     safeBins: params.safeBins,
@@ -616,6 +616,7 @@ export async function processGatewayAllowlist(
             approvals: approvals.file,
             agentId: params.agentId,
             segments: allowlistEval.segments,
+            authorizationPlan: allowlistEval.authorizationPlan,
             cwd: params.workdir,
             env: params.env,
             platform: process.platform,

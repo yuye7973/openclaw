@@ -112,6 +112,7 @@ type SystemRunPolicyPhase = SystemRunParsePhase & {
   analysisOk: boolean;
   allowlistSatisfied: boolean;
   segments: ExecCommandSegment[];
+  authorizationPlan?: import("../infra/exec-approvals.js").ExecAuthorizationPlan;
   segmentSatisfiedBy: import("../infra/exec-approvals.js").ExecSegmentSatisfiedBy[];
   plannedAllowlistArgv: string[] | undefined;
   isWindows: boolean;
@@ -395,9 +396,10 @@ async function evaluateSystemRunPolicyPhase(
     allowlistMatches,
     allowlistSatisfied,
     segments,
+    authorizationPlan,
     segmentAllowlistEntries,
     segmentSatisfiedBy,
-  } = evaluateSystemRunAllowlist({
+  } = await evaluateSystemRunAllowlist({
     shellCommand: parsed.shellPayload,
     argv: parsed.argv,
     approvals,
@@ -524,6 +526,7 @@ async function evaluateSystemRunPolicyPhase(
     analysisOk,
     allowlistSatisfied,
     segments,
+    authorizationPlan,
     segmentSatisfiedBy,
     plannedAllowlistArgv: plannedAllowlistArgv ?? undefined,
     isWindows,
@@ -651,6 +654,7 @@ async function executeSystemRunPhase(
           approvals: phase.approvals.file,
           agentId: phase.agentId,
           segments: phase.segments,
+          authorizationPlan: phase.authorizationPlan,
           cwd: phase.cwd,
           env: phase.env,
           platform: process.platform,

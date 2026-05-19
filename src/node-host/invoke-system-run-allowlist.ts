@@ -32,9 +32,10 @@ type SystemRunAllowlistAnalysis = {
   segments: ExecCommandSegment[];
   segmentAllowlistEntries: Array<ExecAllowlistEntry | null>;
   segmentSatisfiedBy: ExecSegmentSatisfiedBy[];
+  authorizationPlan?: import("../infra/exec-approvals.js").ExecAuthorizationPlan;
 };
 
-export function evaluateSystemRunAllowlist(params: {
+export async function evaluateSystemRunAllowlist(params: {
   shellCommand: string | null;
   argv: string[];
   approvals: ReturnType<typeof resolveExecApprovals>;
@@ -46,9 +47,9 @@ export function evaluateSystemRunAllowlist(params: {
   env: Record<string, string> | undefined;
   skillBins: SkillBinTrustEntry[];
   autoAllowSkills: boolean;
-}): SystemRunAllowlistAnalysis {
+}): Promise<SystemRunAllowlistAnalysis> {
   if (params.shellCommand) {
-    const allowlistEval = evaluateShellAllowlist({
+    const allowlistEval = await evaluateShellAllowlist({
       command: params.shellCommand,
       allowlist: params.approvals.allowlist,
       safeBins: params.safeBins,
@@ -70,11 +71,12 @@ export function evaluateSystemRunAllowlist(params: {
       segments: allowlistEval.segments,
       segmentAllowlistEntries: allowlistEval.segmentAllowlistEntries,
       segmentSatisfiedBy: allowlistEval.segmentSatisfiedBy,
+      authorizationPlan: allowlistEval.authorizationPlan,
     };
   }
 
   const analysis = analyzeArgvCommand({ argv: params.argv, cwd: params.cwd, env: params.env });
-  const allowlistEval = evaluateExecAllowlist({
+  const allowlistEval = await evaluateExecAllowlist({
     analysis,
     allowlist: params.approvals.allowlist,
     safeBins: params.safeBins,
@@ -89,9 +91,10 @@ export function evaluateSystemRunAllowlist(params: {
     allowlistMatches: allowlistEval.allowlistMatches,
     allowlistSatisfied:
       params.security === "allowlist" && analysis.ok ? allowlistEval.allowlistSatisfied : false,
-    segments: analysis.segments,
+    segments: allowlistEval.segments ?? analysis.segments,
     segmentAllowlistEntries: allowlistEval.segmentAllowlistEntries,
     segmentSatisfiedBy: allowlistEval.segmentSatisfiedBy,
+    authorizationPlan: allowlistEval.authorizationPlan,
   };
 }
 
