@@ -507,7 +507,13 @@ function readCandidatePackageManifest(params: {
   rootRealPath?: string;
   packageManifestCache?: Map<string, PackageManifest | null>;
 }): PackageManifest | null {
-  const cacheKey = params.rootRealPath ?? path.resolve(params.dir);
+  const trustMode =
+    params.origin === "bundled"
+      ? "trusted"
+      : params.rejectHardlinks
+        ? "external-reject"
+        : "external-allow";
+  const cacheKey = `${trustMode}:${params.rootRealPath ?? path.resolve(params.dir)}`;
   const cached = params.packageManifestCache?.get(cacheKey);
   if (cached !== undefined) {
     return cached;
