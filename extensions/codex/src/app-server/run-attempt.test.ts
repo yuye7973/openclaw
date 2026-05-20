@@ -6672,7 +6672,7 @@ describe("runCodexAppServerAttempt", () => {
     expect(result.timedOut).toBe(false);
   });
 
-  it("routes MCP approval elicitations through the native bridge", async () => {
+  it("routes Computer Use MCP elicitations through the native bridge", async () => {
     let notify: (notification: CodexServerNotification) => Promise<void> = async () => undefined;
     let handleRequest:
       | ((request: { id: string; method: string; params?: unknown }) => Promise<unknown>)
@@ -6685,6 +6685,57 @@ describe("runCodexAppServerAttempt", () => {
         _meta: null,
       });
     const request = vi.fn(async (method: string) => {
+      if (method === "plugin/list") {
+        return {
+          marketplaces: [
+            {
+              name: "openai-curated",
+              path: "/marketplaces/openai-curated",
+              plugins: [
+                {
+                  id: "computer-use",
+                  name: "computer-use",
+                  installed: true,
+                  enabled: true,
+                },
+              ],
+            },
+          ],
+          marketplaceLoadErrors: [],
+          featuredPluginIds: [],
+        };
+      }
+      if (method === "plugin/read") {
+        return {
+          plugin: {
+            marketplaceName: "openai-curated",
+            marketplacePath: "/marketplaces/openai-curated",
+            summary: {
+              id: "computer-use",
+              name: "computer-use",
+              installed: true,
+              enabled: true,
+            },
+            description: null,
+            skills: [],
+            apps: [],
+            mcpServers: ["computer-use"],
+          },
+        };
+      }
+      if (method === "mcpServerStatus/list") {
+        return {
+          data: [
+            {
+              name: "computer-use",
+              tools: {
+                "computer-use.get_app_state": {},
+              },
+            },
+          ],
+          nextCursor: null,
+        };
+      }
       if (method === "thread/start") {
         return threadStartResult("thread-1");
       }
@@ -6716,6 +6767,14 @@ describe("runCodexAppServerAttempt", () => {
 
     const run = runCodexAppServerAttempt(
       createParams(path.join(tempDir, "session.jsonl"), path.join(tempDir, "workspace")),
+      {
+        pluginConfig: {
+          computerUse: {
+            enabled: true,
+            marketplaceName: "openai-curated",
+          },
+        },
+      },
     );
     await vi.waitFor(() => expect(handleRequest).toBeTypeOf("function"));
 
@@ -6725,7 +6784,7 @@ describe("runCodexAppServerAttempt", () => {
       params: {
         threadId: "thread-1",
         turnId: "turn-1",
-        serverName: "codex_apps__github",
+        serverName: "computer-use",
         mode: "form",
       },
     });
@@ -6736,10 +6795,21 @@ describe("runCodexAppServerAttempt", () => {
       _meta: null,
     });
     const [bridgeCall] = mockCall(bridgeSpy, "elicitation bridge") as [
-      { threadId?: string; turnId?: string },
+      {
+        requestParams?: { serverName?: string };
+        threadId?: string;
+        turnId?: string;
+      },
     ];
     expect(bridgeCall.threadId).toBe("thread-1");
     expect(bridgeCall.turnId).toBe("turn-1");
+    expect(bridgeCall.requestParams?.serverName).toBe("computer-use");
+    const requestCalls = request.mock.calls as unknown as Array<[string, unknown, unknown?]>;
+    const threadStart = requestCalls.find(([method]) => method === "thread/start");
+    const threadStartParams = threadStart?.[1] as
+      | { approvalPolicy?: { granular?: { mcp_elicitations?: boolean } } }
+      | undefined;
+    expect(threadStartParams?.approvalPolicy?.granular?.mcp_elicitations).toBe(true);
 
     await notify({
       method: "turn/completed",
