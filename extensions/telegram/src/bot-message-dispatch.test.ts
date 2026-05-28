@@ -70,6 +70,7 @@ const resolveSessionStoreEntry = vi.hoisted(() =>
     existing: store[sessionKey],
   })),
 );
+const buildCapitalQuoteNaturalLanguageReplyTextMock = vi.hoisted(() => vi.fn());
 
 vi.mock("./draft-stream.js", () => ({
   createTelegramDraftStream,
@@ -130,6 +131,10 @@ vi.mock("./sticker-cache.js", () => ({
   searchStickers: () => [],
   getAllCachedStickers: () => [],
   describeStickerImage,
+}));
+
+vi.mock("./capital-quote-natural-language.js", () => ({
+  buildCapitalQuoteNaturalLanguageReplyText: buildCapitalQuoteNaturalLanguageReplyTextMock,
 }));
 
 let dispatchTelegramMessage: typeof import("./bot-message-dispatch.js").dispatchTelegramMessage;
@@ -201,6 +206,7 @@ describe("dispatchTelegramMessage draft streaming", () => {
     resolveMarkdownTableMode.mockClear();
     resolveSessionStoreEntry.mockClear();
     describeStickerImage.mockReset();
+    buildCapitalQuoteNaturalLanguageReplyTextMock.mockReset();
     loadModelCatalog.mockReset();
     findModelInCatalog.mockReset();
     modelSupportsVision.mockReset();
@@ -256,6 +262,7 @@ describe("dispatchTelegramMessage draft streaming", () => {
       provider: "openai",
       model: "gpt-test",
     });
+    buildCapitalQuoteNaturalLanguageReplyTextMock.mockResolvedValue(null);
   });
 
   const createDraftStream = (messageId?: number) => createTestDraftStream({ messageId });
@@ -1013,6 +1020,32 @@ describe("dispatchTelegramMessage draft streaming", () => {
     );
   });
 
+  it("suppresses trailing 'Message failed' warning payload after a successful final reply", async () => {
+    dispatchReplyWithBufferedBlockDispatcher.mockImplementation(async ({ dispatcherOptions }) => {
+      await dispatcherOptions.deliver({ text: "執行完成" }, { kind: "final" });
+      await dispatcherOptions.deliver(
+        { text: "- ⚠️ ✉️ Message failed", isError: true },
+        { kind: "final" },
+      );
+      return { queuedFinal: true };
+    });
+    deliverReplies.mockResolvedValue({ delivered: true });
+
+    await dispatchWithContext({
+      context: createContext(),
+      streamMode: "off",
+    });
+
+    expect(deliverReplies).toHaveBeenCalledTimes(1);
+    const deliveredTexts = deliverReplies.mock.calls.flatMap((call: unknown[]) =>
+      ((call[0] as { replies?: Array<{ text?: string }> }).replies ?? []).map(
+        (reply) => reply.text ?? "",
+      ),
+    );
+    expect(deliveredTexts).toContain("執行完成");
+    expect(deliveredTexts.join("\n")).not.toContain("Message failed");
+  });
+
   it("streams button-bearing text into the same message", async () => {
     const { answerDraftStream } = setupDraftStreams({ answerMessageId: 2001 });
     const buttons = [[{ text: "OK", callback_data: "ok" }]];
@@ -1285,6 +1318,125 @@ describe("dispatchTelegramMessage draft streaming", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("uses natural-language quote fallback text before generic dispatch error text", async () => {
+    dispatchReplyWithBufferedBlockDispatcher.mockRejectedValue(new Error("dispatcher exploded"));
+    deliverReplies.mockResolvedValue({ delivered: true });
+    buildCapitalQuoteNaturalLanguageReplyTextMock.mockResolvedValue(
+      "[OpenClaw 報價] A50指熱2605 CN0000｜狀態=即時",
+    );
+
+    await dispatchWithContext({
+      context: createContext({
+        ctxPayload: {
+          SessionKey: "s1",
+          RawBody: "自動交易A50指",
+        } as unknown as TelegramMessageContext["ctxPayload"],
+      }),
+      streamMode: "off",
+    });
+
+    expect(buildCapitalQuoteNaturalLanguageReplyTextMock).toHaveBeenCalledWith({
+      text: "自動交易A50指",
+      repoRoot: expect.any(String),
+    });
+    expect(deliverReplies).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replies: [{ text: "[OpenClaw 報價] A50指熱2605 CN0000｜狀態=即時" }],
+      }),
+    );
+  });
+
+  it("falls back to generic dispatch error text when quote fallback resolver throws", async () => {
+    dispatchReplyWithBufferedBlockDispatcher.mockRejectedValue(new Error("dispatcher exploded"));
+    deliverReplies.mockResolvedValue({ delivered: true });
+    buildCapitalQuoteNaturalLanguageReplyTextMock.mockRejectedValue(
+      new Error("quote resolver failed"),
+    );
+
+    await expect(
+      dispatchWithContext({
+        context: createContext({
+          ctxPayload: {
+            SessionKey: "s1",
+            RawBody: "自動交易A50指",
+          } as unknown as TelegramMessageContext["ctxPayload"],
+        }),
+        streamMode: "off",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(buildCapitalQuoteNaturalLanguageReplyTextMock).toHaveBeenCalledWith({
+      text: "自動交易A50指",
+      repoRoot: expect.any(String),
+    });
+    expect(deliverReplies).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replies: [{ text: "處理你的請求時發生錯誤，請稍後再試。" }],
+      }),
+    );
+  });
+
+  it("does not send generic dispatch fallback when Telegram reports message-not-modified", async () => {
+    dispatchReplyWithBufferedBlockDispatcher.mockRejectedValue(
+      new Error(
+        "400: Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message",
+      ),
+    );
+    deliverReplies.mockResolvedValue({ delivered: true });
+
+    await expect(
+      dispatchWithContext({
+        context: createContext({
+          ctxPayload: {
+            SessionKey: "s1",
+            RawBody: "/status",
+          } as unknown as TelegramMessageContext["ctxPayload"],
+        }),
+        streamMode: "off",
+      }),
+    ).resolves.toBeUndefined();
+
+    const replyTexts = deliverReplies.mock.calls.flatMap((call: unknown[]) => {
+      const firstArg = call[0] as { replies?: Array<{ text?: string }> } | undefined;
+      return (firstArg?.replies ?? []).map((reply) => reply.text ?? "");
+    });
+    expect(replyTexts).not.toContain("處理你的請求時發生錯誤，請稍後再試。");
+  });
+
+  it("adds return-main-menu button on native callback generic dispatch fallback", async () => {
+    dispatchReplyWithBufferedBlockDispatcher.mockRejectedValue(new Error("dispatcher exploded"));
+    deliverReplies.mockResolvedValue({ delivered: true });
+    buildCapitalQuoteNaturalLanguageReplyTextMock.mockResolvedValue(null);
+
+    await expect(
+      dispatchWithContext({
+        context: createContext({
+          ctxPayload: {
+            SessionKey: "s1",
+            RawBody: "自動交易A50指",
+            CommandSource: "native",
+          } as unknown as TelegramMessageContext["ctxPayload"],
+        }),
+        streamMode: "off",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(deliverReplies).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replies: [
+          expect.objectContaining({
+            text: "處理你的請求時發生錯誤，請稍後再試。",
+            channelData: {
+              telegram: {
+                buttons: [[{ text: "↩ 返回主選單", callback_data: "tgcmd:/start" }]],
+              },
+            },
+          }),
+        ],
+      }),
+    );
   });
 
   it("restores the initial Telegram status reaction after an error when no final reply is sent", async () => {

@@ -66,6 +66,8 @@ type DeliveryProgress = ReplyThreadDeliveryProgress & {
 type TelegramReplyChannelData = {
   buttons?: TelegramInlineButtons;
   pin?: boolean;
+  /** When "html", bypass markdown→HTML conversion and pass raw HTML to Telegram API. */
+  textMode?: "html" | "markdown";
 };
 
 type TelegramReplyQuoteForSend = {
@@ -821,13 +823,17 @@ export async function deliverReplies(params: {
         }),
       );
       let firstDeliveredMessageId: number | undefined;
+      // When a plugin explicitly sets textMode: "html", bypass the markdown→HTML converter
+      // and pass the raw HTML through as-is so that tags like <b>, <code> render correctly.
+      const effectiveChunkText: ChunkTextFn =
+        telegramData?.textMode === "html" ? (raw: string) => [{ html: raw, text: raw }] : chunkText;
       if (mediaList.length === 0) {
         firstDeliveredMessageId = await deliverTextReply({
           bot: params.bot,
           chatId: params.chatId,
           runtime: params.runtime,
           thread: params.thread,
-          chunkText,
+          chunkText: effectiveChunkText,
           replyText: reply.text || "",
           replyMarkup,
           replyQuoteMessageId: replyQuote.messageId,
@@ -850,7 +856,7 @@ export async function deliverReplies(params: {
           thread: params.thread,
           tableMode: params.tableMode,
           mediaLocalRoots: params.mediaLocalRoots,
-          chunkText,
+          chunkText: effectiveChunkText,
           mediaLoader,
           onVoiceRecording: params.onVoiceRecording,
           linkPreview: params.linkPreview,

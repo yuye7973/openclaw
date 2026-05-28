@@ -251,14 +251,14 @@ export async function handleTelegramAction(
       return jsonResult({
         ok: false,
         reason: "disabled",
-        hint: `Telegram agent reactions disabled (reactionLevel="${reactionLevelInfo.level}"). Do not retry.`,
+        hint: `Telegram 反應功能已停用（reactionLevel="${reactionLevelInfo.level}"），請勿重試。`,
       });
     }
     if (!isActionEnabled("reactions")) {
       return jsonResult({
         ok: false,
         reason: "disabled",
-        hint: "Telegram reactions are disabled via actions.reactions. Do not retry.",
+        hint: "Telegram 反應功能已由 actions.reactions 停用，請勿重試。",
       });
     }
     const chatId = readTelegramChatId(params);
@@ -269,18 +269,18 @@ export async function handleTelegramAction(
       return jsonResult({
         ok: false,
         reason: "missing_message_id",
-        hint: "Telegram reaction requires a valid messageId (or inbound context fallback). Do not retry.",
+        hint: "Telegram 反應需要有效的 messageId（或可用的 inbound context fallback），請勿重試。",
       });
     }
     const { emoji, remove, isEmpty } = readReactionParams(params, {
-      removeErrorMessage: "Emoji is required to remove a Telegram reaction.",
+      removeErrorMessage: "移除 Telegram 反應時必須提供 emoji。",
     });
     const token = resolveTelegramToken(cfg, { accountId }).token;
     if (!token) {
       return jsonResult({
         ok: false,
         reason: "missing_token",
-        hint: "Telegram bot token missing. Do not retry.",
+        hint: "缺少 Telegram bot token，請勿重試。",
       });
     }
     let reactionResult: Awaited<ReturnType<typeof telegramActionRuntime.reactMessageTelegram>>;
@@ -303,8 +303,8 @@ export async function handleTelegramAction(
         reason: isInvalid ? "REACTION_INVALID" : "error",
         emoji,
         hint: isInvalid
-          ? "This emoji is not supported for Telegram reactions. Add it to your reaction disallow list so you do not try it again."
-          : "Reaction failed. Do not retry.",
+          ? "此 emoji 不支援 Telegram 反應。請加入 reaction disallow list，避免再次嘗試。"
+          : "反應操作失敗，請勿重試。",
       });
     }
     if (!reactionResult.ok) {

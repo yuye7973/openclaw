@@ -134,7 +134,7 @@ export const createTelegramMessageProcessor = (deps: TelegramMessageProcessorDep
       try {
         await bot.api.sendMessage(
           context.chatId,
-          "Something went wrong while processing your request. Please try again.",
+          "處理你的請求時發生錯誤，請稍後再試。",
           buildTelegramThreadParams(context.threadSpec),
         );
       } catch {

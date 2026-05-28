@@ -153,7 +153,7 @@ describe("registerTelegramNativeCommands real plugin registry", () => {
         replies: [expect.objectContaining({ text: "paired:now" })],
       }),
     );
-    expect(sendMessage).not.toHaveBeenCalledWith(123, "Command not found.");
+    expect(sendMessage).not.toHaveBeenCalledWith(123, "找不到這個指令。");
   });
 
   it("uses plugin command metadata to send and edit a Telegram progress placeholder", async () => {
@@ -212,7 +212,7 @@ describe("registerTelegramNativeCommands real plugin registry", () => {
         replies: [expect.objectContaining({ text: "paired:now" })],
       }),
     );
-    expect(sendMessage).not.toHaveBeenCalledWith(123, "Command not found.");
+    expect(sendMessage).not.toHaveBeenCalledWith(123, "找不到這個指令。");
   });
 
   it("keeps real plugin command handlers available when native menu registration is disabled", () => {

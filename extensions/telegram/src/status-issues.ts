@@ -123,6 +123,24 @@ function collectTelegramPollingRuntimeIssues(params: {
       });
     }
   }
+
+  if (account.connected === true && lastTransportActivityAt == null) {
+    const lifecycleAgeMs = lastStartAt != null ? Math.max(0, now - lastStartAt) : null;
+    const beyondGrace =
+      lifecycleAgeMs == null || lifecycleAgeMs > TELEGRAM_POLLING_CONNECT_GRACE_MS;
+    if (beyondGrace) {
+      issues.push({
+        channel: "telegram",
+        accountId,
+        kind: "runtime",
+        message: appendTelegramRuntimeError(
+          "Telegram polling reports connected but is missing last transport activity timestamp",
+          account.lastError,
+        ),
+        fix,
+      });
+    }
+  }
 }
 
 function collectTelegramWebhookRuntimeIssues(params: {

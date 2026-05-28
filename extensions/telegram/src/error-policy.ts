@@ -15,6 +15,7 @@ type TelegramErrorConfig =
 
 const errorCooldownStore = new Map<string, Map<string, number>>();
 const DEFAULT_ERROR_COOLDOWN_MS = 14400000;
+const TELEGRAM_MESSAGE_NOT_MODIFIED_KEY = "telegram:message_not_modified";
 
 function pruneExpiredCooldowns(messageStore: Map<string, number>, now: number) {
   for (const [message, expiresAt] of messageStore) {
@@ -68,7 +69,7 @@ export function shouldSuppressTelegramError(params: {
 }): boolean {
   const { scopeKey, cooldownMs, errorMessage } = params;
   const now = Date.now();
-  const messageKey = errorMessage ?? "";
+  const messageKey = normalizeErrorMessageKey(errorMessage);
   const scopeStore = errorCooldownStore.get(scopeKey);
 
   if (scopeStore) {
@@ -96,6 +97,27 @@ export function shouldSuppressTelegramError(params: {
   nextScopeStore.set(messageKey, now + cooldownMs);
   errorCooldownStore.set(scopeKey, nextScopeStore);
   return false;
+}
+
+function normalizeErrorMessageKey(errorMessage?: string): string {
+  if (typeof errorMessage !== "string" || errorMessage.trim().length === 0) {
+    return "";
+  }
+  const normalized = errorMessage
+    .trim()
+    .replace(/\\r\\n/gi, "\n")
+    .replace(/\\n/gi, "\n")
+    .replace(/\\r/gi, "\n")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+  if (
+    normalized.includes("message is not modified") ||
+    normalized.includes("message_not_modified") ||
+    normalized.includes("specified new message content and reply markup are exactly the same")
+  ) {
+    return TELEGRAM_MESSAGE_NOT_MODIFIED_KEY;
+  }
+  return errorMessage.trim();
 }
 
 export function isSilentErrorPolicy(policy: TelegramErrorPolicy): boolean {

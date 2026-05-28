@@ -141,11 +141,9 @@ describe("telegram bot message processor", () => {
     );
     await expect(processSampleMessage(processMessage)).resolves.toBeUndefined();
 
-    expect(sendMessage).toHaveBeenCalledWith(
-      123,
-      "Something went wrong while processing your request. Please try again.",
-      { message_thread_id: 456 },
-    );
+    expect(sendMessage).toHaveBeenCalledWith(123, "處理你的請求時發生錯誤，請稍後再試。", {
+      message_thread_id: 456,
+    });
     expect(runtimeError).toHaveBeenCalledWith(expect.stringContaining("dispatch exploded"));
   });
 
@@ -163,7 +161,7 @@ describe("telegram bot message processor", () => {
 
     expect(sendMessage).toHaveBeenCalledWith(
       123,
-      "Something went wrong while processing your request. Please try again.",
+      "處理你的請求時發生錯誤，請稍後再試。",
       undefined,
     );
   });
@@ -181,7 +179,7 @@ describe("telegram bot message processor", () => {
 
     expect(sendMessage).toHaveBeenCalledWith(
       123,
-      "Something went wrong while processing your request. Please try again.",
+      "處理你的請求時發生錯誤，請稍後再試。",
       undefined,
     );
     expect(runtimeError).toHaveBeenCalledWith(expect.stringContaining("dispatch exploded"));

@@ -446,7 +446,7 @@ function expectUnauthorizedNewCommandBlocked(sendMessage: ReturnType<typeof vi.f
   expect(persistentBindingMocks.ensureConfiguredBindingRouteReady).not.toHaveBeenCalled();
   expect(sendMessage).toHaveBeenCalledWith(
     -1001234567890,
-    "You are not authorized to use this command.",
+    "你沒有權限使用這個指令。",
     expect.objectContaining({ message_thread_id: 42 }),
   );
 }
@@ -1002,7 +1002,7 @@ describe("registerTelegramNativeCommands — session metadata", () => {
     expect(replyMocks.dispatchReplyWithBufferedBlockDispatcher).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledWith(
       -1001234567890,
-      "Configured ACP binding is unavailable right now. Please try again.",
+      "目前無法使用已設定的 ACP 綁定，請稍後再試。",
       expect.objectContaining({ message_thread_id: 42 }),
     );
   });
@@ -1139,7 +1139,7 @@ describe("registerTelegramNativeCommands — session metadata", () => {
 
     expect(deliveryMocks.deliverReplies).toHaveBeenCalledWith(
       expect.objectContaining({
-        replies: [{ text: "No response generated. Please try again." }],
+        replies: [{ text: "這次沒有產生可回覆內容，請稍後再試。" }],
       }),
     );
   });

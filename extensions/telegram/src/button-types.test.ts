@@ -20,4 +20,36 @@ describe("buildTelegramInteractiveButtons callback limits", () => {
       }),
     ).toEqual([[{ text: "Keep", callback_data: "ok", style: undefined }]]);
   });
+
+  it("trims labels and drops whitespace-only labels", () => {
+    expect(
+      buildTelegramInteractiveButtons({
+        blocks: [
+          {
+            type: "buttons",
+            buttons: [
+              { label: "  刷新報價  ", value: "quote:refresh" },
+              { label: "   ", value: "quote:noop" },
+            ],
+          },
+        ],
+      }),
+    ).toEqual([[{ text: "刷新報價", callback_data: "quote:refresh", style: undefined }]]);
+  });
+
+  it("removes zero-width chars from labels before rendering", () => {
+    expect(
+      buildTelegramInteractiveButtons({
+        blocks: [
+          {
+            type: "buttons",
+            buttons: [
+              { label: "\u200B\u200D刷新報價\uFEFF", value: "quote:refresh" },
+              { label: "\u200B\u200D\uFEFF", value: "quote:noop" },
+            ],
+          },
+        ],
+      }),
+    ).toEqual([[{ text: "刷新報價", callback_data: "quote:refresh", style: undefined }]]);
+  });
 });

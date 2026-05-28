@@ -71,6 +71,7 @@ import {
 } from "./bot/native-quote.js";
 import type { TelegramStreamMode } from "./bot/types.js";
 import type { TelegramInlineButtons } from "./button-types.js";
+import { buildCapitalQuoteNaturalLanguageReplyText } from "./capital-quote-natural-language.js";
 import { createTelegramDraftStream } from "./draft-stream.js";
 import {
   buildTelegramErrorScopeKey,
@@ -96,8 +97,12 @@ import { cacheSticker, describeStickerImage } from "./sticker-cache.js";
 
 export { pruneStickerMediaFromContext } from "./bot-message-dispatch.media.js";
 
-const EMPTY_RESPONSE_FALLBACK = "No response generated. Please try again.";
+const EMPTY_RESPONSE_FALLBACK = "這次沒有產生可回覆內容，請稍後再試。";
 const silentReplyDispatchLogger = createSubsystemLogger("telegram/silent-reply-dispatch");
+const TELEGRAM_MESSAGE_NOT_MODIFIED_RE =
+  /message\s*is\s*not\s*modified|message_not_modified|specified\s+new\s+message\s+content\s+and\s+reply\s+markup\s+are\s+exactly\s+the\s+same/i;
+const TELEGRAM_MESSAGE_DELIVERY_WARNING_RE =
+  /^(?:(?:[-*•>\u25e6]|\d+[.)])\s*)?⚠️\s*✉️\s*message failed(?:\s*:.*)?$/i;
 
 /** Minimum chars before sending first streaming message (improves push notification UX) */
 const DRAFT_MIN_INITIAL_CHARS = 30;
@@ -204,6 +209,36 @@ export function getTelegramReplyFenceSizeForTests(): number {
 
 export function resetTelegramReplyFenceForTests(): void {
   telegramReplyFenceByKey.clear();
+}
+
+function isTelegramMessageNotModifiedError(error: unknown): boolean {
+  const normalized = formatErrorMessage(error)
+    .replace(/\\r\\n/gi, "\n")
+    .replace(/\\n/gi, "\n")
+    .replace(/\\r/gi, "\n")
+    .replace(/\s+/g, " ")
+    .trim();
+  return TELEGRAM_MESSAGE_NOT_MODIFIED_RE.test(normalized);
+}
+
+function isTelegramMessageDeliveryWarningLine(text: string | undefined): boolean {
+  const normalized = text?.replaceAll("\u200b", "").replaceAll("\r", "\n").trim();
+  if (!normalized) {
+    return false;
+  }
+  return TELEGRAM_MESSAGE_DELIVERY_WARNING_RE.test(normalized);
+}
+
+function isTelegramMessageDeliveryWarningPayloadText(text: string | undefined): boolean {
+  if (!text?.trim()) {
+    return false;
+  }
+  const lines = text
+    .replaceAll("\r", "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  return lines.length > 0 && lines.every((line) => isTelegramMessageDeliveryWarningLine(line));
 }
 
 function resolveTelegramReasoningLevel(params: {
@@ -989,7 +1024,23 @@ export const dispatchTelegramMessage = async ({
                     if (isDispatchSuperseded()) {
                       return;
                     }
-                    if (payload.isError === true) {
+                    let resolvedPayload = payload;
+                    const isDeliveryWarningPayload =
+                      resolvedPayload.isError === true &&
+                      isTelegramMessageDeliveryWarningPayloadText(resolvedPayload.text);
+                    if (isDeliveryWarningPayload) {
+                      hadErrorReplyFailureOrSkip = true;
+                      if (deliveryState.snapshot().delivered) {
+                        logVerbose(
+                          "telegram: suppressed trailing message-delivery warning payload",
+                        );
+                        return;
+                      }
+                      resolvedPayload = {
+                        ...resolvedPayload,
+                        text: "通知回傳異常，請按「返回交易」或「模擬助手」後重試。",
+                      };
+                    } else if (resolvedPayload.isError === true) {
                       hadErrorReplyFailureOrSkip = true;
                     }
                     if (info.kind === "final") {
@@ -999,20 +1050,20 @@ export const dispatchTelegramMessage = async ({
                       shouldSuppressLocalTelegramExecApprovalPrompt({
                         cfg,
                         accountId: route.accountId,
-                        payload,
+                        payload: resolvedPayload,
                       })
                     ) {
                       queuedFinal = true;
                       return;
                     }
                     const telegramButtons = (
-                      payload.channelData?.telegram as
+                      resolvedPayload.channelData?.telegram as
                         | { buttons?: TelegramInlineButtons }
                         | undefined
                     )?.buttons;
-                    const split = splitTextIntoLaneSegments(payload.text);
+                    const split = splitTextIntoLaneSegments(resolvedPayload.text);
                     const segments = split.segments;
-                    const reply = resolveSendableOutboundReplyParts(payload);
+                    const reply = resolveSendableOutboundReplyParts(resolvedPayload);
                     const _hasMedia = reply.hasMedia;
 
                     const flushBufferedFinalAnswer = async () => {
@@ -1056,11 +1107,11 @@ export const dispatchTelegramMessage = async ({
                         streamMode === "progress" &&
                         segment.lane === "answer" &&
                         info.kind === "final"
-                          ? await deliverProgressModeFinalAnswer(payload, segment.text)
+                          ? await deliverProgressModeFinalAnswer(resolvedPayload, segment.text)
                           : await deliverLaneText({
                               laneName: segment.lane,
                               text: segment.text,
-                              payload,
+                              payload: resolvedPayload,
                               infoKind: info.kind,
                               buttons: telegramButtons,
                             });
@@ -1084,7 +1135,9 @@ export const dispatchTelegramMessage = async ({
                     if (split.suppressedReasoningOnly) {
                       if (reply.hasMedia) {
                         const payloadWithoutSuppressedReasoning =
-                          typeof payload.text === "string" ? { ...payload, text: "" } : payload;
+                          typeof resolvedPayload.text === "string"
+                            ? { ...resolvedPayload, text: "" }
+                            : resolvedPayload;
                         await sendPayload(payloadWithoutSuppressedReasoning, {
                           durable: info.kind === "final",
                         });
@@ -1107,7 +1160,7 @@ export const dispatchTelegramMessage = async ({
                       }
                       return;
                     }
-                    await sendPayload(payload, { durable: info.kind === "final" });
+                    await sendPayload(resolvedPayload, { durable: info.kind === "final" });
                     if (info.kind === "final") {
                       await flushBufferedFinalAnswer();
                     }
@@ -1308,8 +1361,12 @@ export const dispatchTelegramMessage = async ({
       suppressSilentReplyFallback =
         turnResult.dispatchResult.sourceReplyDeliveryMode === "message_tool_only";
     } catch (err) {
-      dispatchError = err;
-      runtime.error?.(danger(`telegram dispatch failed: ${String(err)}`));
+      if (isTelegramMessageNotModifiedError(err)) {
+        logVerbose("telegram dispatch ignored benign not-modified edit error");
+      } else {
+        dispatchError = err;
+        runtime.error?.(danger(`telegram dispatch failed: ${String(err)}`));
+      }
     } finally {
       await draftLaneEventQueue;
       progressDraftGate.cancel();
@@ -1374,11 +1431,36 @@ export const dispatchTelegramMessage = async ({
     (!deliverySummary.delivered &&
       (deliverySummary.skippedNonSilent > 0 || deliverySummary.failedNonSilent > 0))
   ) {
-    const fallbackText = dispatchError
-      ? "Something went wrong while processing your request. Please try again."
+    let fallbackText = dispatchError
+      ? "處理你的請求時發生錯誤，請稍後再試。"
       : EMPTY_RESPONSE_FALLBACK;
+    const fallbackReply: ReplyPayload = { text: fallbackText };
+    if (dispatchError) {
+      const rawText = ctxPayload.CommandBody ?? ctxPayload.RawBody ?? ctxPayload.Body ?? "";
+      if (rawText.trim()) {
+        try {
+          const quoteFallback = await buildCapitalQuoteNaturalLanguageReplyText({
+            text: rawText,
+            repoRoot: process.env.OPENCLAW_REPO_ROOT || process.cwd(),
+          });
+          if (quoteFallback) {
+            fallbackText = quoteFallback;
+            fallbackReply.text = fallbackText;
+          }
+        } catch (err) {
+          logVerbose(`telegram: quote fallback resolver failed: ${formatErrorMessage(err)}`);
+        }
+      }
+      if (ctxPayload.CommandSource === "native") {
+        fallbackReply.channelData = {
+          telegram: {
+            buttons: [[{ text: "↩ 返回主選單", callback_data: "tgcmd:/start" }]],
+          },
+        };
+      }
+    }
     const result = await (telegramDeps.deliverReplies ?? deliverReplies)({
-      replies: [{ text: fallbackText }],
+      replies: [fallbackReply],
       ...deliveryBaseOptions,
       silent: silentErrorReplies && (dispatchError != null || hadErrorReplyFailureOrSkip),
       mediaLoader: telegramDeps.loadWebMedia,

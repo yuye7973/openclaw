@@ -3,6 +3,7 @@ import {
   buildTelegramInboundDebounceConversationKey,
   buildTelegramInboundDebounceKey,
 } from "./bot-handlers.debounce-key.js";
+import { canBypassModelForQuote, hasTelegramBotMention } from "./bot-handlers.quote-bypass.js";
 
 describe("buildTelegramInboundDebounceKey", () => {
   it("uses the resolved account id instead of literal default when provided", () => {
@@ -52,5 +53,50 @@ describe("buildTelegramInboundDebounceKey", () => {
 
   it("uses the chat id as the conversation key when no thread is present", () => {
     expect(buildTelegramInboundDebounceConversationKey({ chatId: 7 })).toBe("7");
+  });
+});
+
+describe("quote bypass policy", () => {
+  it("detects explicit bot mention in group text", () => {
+    expect(hasTelegramBotMention("請 @OpenClawBot 幫我看 A50 報價", "OpenClawBot")).toBe(true);
+    expect(hasTelegramBotMention("請 @openclawbot 幫我看 A50 報價", "OpenClawBot")).toBe(true);
+    expect(hasTelegramBotMention("請幫我看 A50 報價", "OpenClawBot")).toBe(false);
+  });
+
+  it("allows bypass in direct chat for non-command text", () => {
+    expect(
+      canBypassModelForQuote("A50 現在報價", {
+        chat: { type: "private" },
+      } as never),
+    ).toBe(true);
+  });
+
+  it("blocks slash-command text from bypass", () => {
+    expect(
+      canBypassModelForQuote("/quote A50", {
+        chat: { type: "private" },
+      } as never),
+    ).toBe(false);
+  });
+
+  it("requires mention when message comes from group chat", () => {
+    expect(
+      canBypassModelForQuote(
+        "A50 現在報價",
+        {
+          chat: { type: "group" },
+        } as never,
+        "OpenClawBot",
+      ),
+    ).toBe(false);
+    expect(
+      canBypassModelForQuote(
+        "@OpenClawBot A50 現在報價",
+        {
+          chat: { type: "group" },
+        } as never,
+        "OpenClawBot",
+      ),
+    ).toBe(true);
   });
 });

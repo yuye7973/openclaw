@@ -24,6 +24,11 @@ function toTelegramButtonStyle(
   return style === "danger" || style === "success" || style === "primary" ? style : undefined;
 }
 
+function normalizeTelegramButtonLabel(label: string): string | undefined {
+  const normalized = label.replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 function chunkInteractiveButtons(
   buttons: readonly InteractiveReplyButton[],
   rows: TelegramInlineButton[][],
@@ -33,13 +38,17 @@ function chunkInteractiveButtons(
       if (!button.value) {
         return [];
       }
+      const label = normalizeTelegramButtonLabel(button.label);
+      if (!label) {
+        return [];
+      }
       const callbackData = sanitizeTelegramCallbackData(button.value);
       if (!callbackData) {
         return [];
       }
       return [
         {
-          text: button.label,
+          text: label,
           callback_data: callbackData,
           style: toTelegramButtonStyle(button.style),
         },

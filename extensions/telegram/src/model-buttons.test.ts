@@ -189,7 +189,7 @@ describe("buildModelsKeyboard", () => {
       totalPages: 1,
     });
     expect(result).toHaveLength(1);
-    expect(result[0]?.[0]?.text).toBe("<< Back");
+    expect(result[0]?.[0]?.text).toBe("↩ 返回供應商");
     expect(result[0]?.[0]?.callback_data).toBe("mdl_back");
   });
 
@@ -224,7 +224,7 @@ describe("buildModelsKeyboard", () => {
       expect(result[0]?.[0]?.text).toBe(testCase.firstText);
       expect(result[0]?.[0]?.callback_data).toBe("mdl_sel_anthropic/claude-sonnet-4");
       expect(result[1]?.[0]?.text).toBe("claude-opus-4");
-      expect(result[2]?.[0]?.text).toBe("<< Back");
+      expect(result[2]?.[0]?.text).toBe("↩ 返回供應商");
     }
   });
 
@@ -307,7 +307,7 @@ describe("buildModelsKeyboard", () => {
       {
         name: "first page",
         params: { currentPage: 1, models: ["model1", "model2"] },
-        expectedPagination: ["1/3", "Next ▶"],
+        expectedPagination: ["1/3", "下一頁 ▶"],
       },
       {
         name: "middle page",
@@ -315,7 +315,7 @@ describe("buildModelsKeyboard", () => {
           currentPage: 2,
           models: ["model1", "model2", "model3", "model4", "model5", "model6"],
         },
-        expectedPagination: ["◀ Prev", "2/3", "Next ▶"],
+        expectedPagination: ["◀ 上一頁", "2/3", "下一頁 ▶"],
       },
       {
         name: "last page",
@@ -323,7 +323,7 @@ describe("buildModelsKeyboard", () => {
           currentPage: 3,
           models: ["model1", "model2", "model3", "model4", "model5", "model6"],
         },
-        expectedPagination: ["◀ Prev", "3/3"],
+        expectedPagination: ["◀ 上一頁", "3/3"],
       },
     ] as const;
     for (const testCase of cases) {
@@ -391,7 +391,7 @@ describe("buildBrowseProvidersButton", () => {
     const result = buildBrowseProvidersButton();
     expect(result).toHaveLength(1);
     expect(result[0]).toHaveLength(1);
-    expect(result[0]?.[0]?.text).toBe("Browse providers");
+    expect(result[0]?.[0]?.text).toBe("瀏覽供應商");
     expect(result[0]?.[0]?.callback_data).toBe("mdl_prov");
   });
 });

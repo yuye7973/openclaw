@@ -27,6 +27,7 @@ const {
   middlewareUseSpy,
   onSpy,
   replySpy,
+  resolveCapitalSemiApprovalCallbackSpy,
   resolveExecApprovalSpy,
   sendAnimationSpy,
   sendChatActionSpy,
@@ -691,6 +692,613 @@ describe("createTelegramBot", () => {
     expect(payload.CommandBody).toBe("/fast status");
     expect(payload.CommandSource).toBe("native");
     expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-native-1");
+  });
+  it("preserves native command source for status/quote/capital status callback shortcuts", async () => {
+    loadConfig.mockReturnValue({
+      commands: { text: false, native: true },
+      channels: {
+        telegram: {
+          dmPolicy: "open",
+          allowFrom: ["*"],
+        },
+      },
+    });
+
+    createTelegramBot({ token: "tok" });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-native-status",
+        data: "tgcmd:/status",
+        from: { id: 9, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: 1234, type: "private" },
+          date: 1736380800,
+          message_id: 9,
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-native-quote-status",
+        data: "tgcmd:/quote status",
+        from: { id: 9, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: 1234, type: "private" },
+          date: 1736380800,
+          message_id: 10,
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-native-capital-status",
+        data: "tgcmd:/capital_status",
+        from: { id: 9, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: 1234, type: "private" },
+          date: 1736380800,
+          message_id: 11,
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    expect(replySpy).toHaveBeenCalledTimes(3);
+    const statusPayload = replySpy.mock.calls[0]?.[0] as {
+      CommandBody?: string;
+      CommandSource?: string;
+    };
+    const quotePayload = replySpy.mock.calls[1]?.[0] as {
+      CommandBody?: string;
+      CommandSource?: string;
+    };
+    const capitalPayload = replySpy.mock.calls[2]?.[0] as {
+      CommandBody?: string;
+      CommandSource?: string;
+    };
+    expect(statusPayload.CommandBody).toBe("/status");
+    expect(statusPayload.CommandSource).toBe("native");
+    expect(quotePayload.CommandBody).toBe("/quote status");
+    expect(quotePayload.CommandSource).toBe("native");
+    expect(capitalPayload.CommandBody).toBe("/capital_status");
+    expect(capitalPayload.CommandSource).toBe("native");
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-native-status");
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-native-quote-status");
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-native-capital-status");
+  });
+  it("preserves /status callback topic thread id in forum groups", async () => {
+    loadConfig.mockReturnValue({
+      commands: { text: false, native: true },
+      channels: {
+        telegram: {
+          groupPolicy: "open",
+          groups: { "*": { requireMention: false } },
+          allowFrom: ["*"],
+        },
+      },
+    });
+
+    createTelegramBot({ token: "tok" });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-native-status-topic",
+        data: "tgcmd:/status",
+        from: { id: 9, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: -1001234567890, type: "supergroup", title: "Forum Group", is_forum: true },
+          date: 1736380800,
+          message_id: 99,
+          message_thread_id: 42,
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    expect(replySpy).toHaveBeenCalledTimes(1);
+    const payload = replySpy.mock.calls[0]?.[0] as {
+      CommandBody?: string;
+      CommandSource?: string;
+      MessageThreadId?: unknown;
+    };
+    expect(payload.CommandBody).toBe("/status");
+    expect(payload.CommandSource).toBe("native");
+    expect(payload.MessageThreadId).toBe(42);
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-native-status-topic");
+  });
+  it("maps /status callback without topic id to General topic in forum groups", async () => {
+    loadConfig.mockReturnValue({
+      commands: { text: false, native: true },
+      channels: {
+        telegram: {
+          groupPolicy: "open",
+          groups: { "*": { requireMention: false } },
+          allowFrom: ["*"],
+        },
+      },
+    });
+
+    createTelegramBot({ token: "tok" });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-native-status-general-topic",
+        data: "tgcmd:/status",
+        from: { id: 9, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: -1001234567890, type: "supergroup", title: "Forum Group", is_forum: true },
+          date: 1736380800,
+          message_id: 100,
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    expect(replySpy).toHaveBeenCalledTimes(1);
+    const payload = replySpy.mock.calls[0]?.[0] as {
+      CommandBody?: string;
+      CommandSource?: string;
+      MessageThreadId?: unknown;
+    };
+    expect(payload.CommandBody).toBe("/status");
+    expect(payload.CommandSource).toBe("native");
+    expect(payload.MessageThreadId).toBe(1);
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-native-status-general-topic");
+  });
+  it("maps /quote status and /capital_status callbacks without topic id to General topic in forum groups", async () => {
+    loadConfig.mockReturnValue({
+      commands: { text: false, native: true },
+      channels: {
+        telegram: {
+          groupPolicy: "open",
+          groups: { "*": { requireMention: false } },
+          allowFrom: ["*"],
+        },
+      },
+    });
+
+    createTelegramBot({ token: "tok" });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-native-quote-status-general-topic",
+        data: "tgcmd:/quote status",
+        from: { id: 9, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: -1001234567890, type: "supergroup", title: "Forum Group", is_forum: true },
+          date: 1736380800,
+          message_id: 101,
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-native-capital-status-general-topic",
+        data: "tgcmd:/capital_status",
+        from: { id: 9, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: -1001234567890, type: "supergroup", title: "Forum Group", is_forum: true },
+          date: 1736380800,
+          message_id: 102,
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    expect(replySpy).toHaveBeenCalledTimes(2);
+    const quotePayload = replySpy.mock.calls[0]?.[0] as {
+      CommandBody?: string;
+      CommandSource?: string;
+      MessageThreadId?: unknown;
+    };
+    const capitalPayload = replySpy.mock.calls[1]?.[0] as {
+      CommandBody?: string;
+      CommandSource?: string;
+      MessageThreadId?: unknown;
+    };
+    expect(quotePayload.CommandBody).toBe("/quote status");
+    expect(quotePayload.CommandSource).toBe("native");
+    expect(quotePayload.MessageThreadId).toBe(1);
+    expect(capitalPayload.CommandBody).toBe("/capital_status");
+    expect(capitalPayload.CommandSource).toBe("native");
+    expect(capitalPayload.MessageThreadId).toBe(1);
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-native-quote-status-general-topic");
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-native-capital-status-general-topic");
+  });
+  it("does not map /status callback to General topic in non-forum supergroups", async () => {
+    loadConfig.mockReturnValue({
+      commands: { text: false, native: true },
+      channels: {
+        telegram: {
+          groupPolicy: "open",
+          groups: { "*": { requireMention: false } },
+          allowFrom: ["*"],
+        },
+      },
+    });
+
+    createTelegramBot({ token: "tok" });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-native-status-non-forum-supergroup",
+        data: "tgcmd:/status",
+        from: { id: 9, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: -1001234567890, type: "supergroup", title: "Regular Supergroup" },
+          date: 1736380800,
+          message_id: 101,
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    expect(replySpy).toHaveBeenCalledTimes(1);
+    const payload = replySpy.mock.calls[0]?.[0] as {
+      CommandBody?: string;
+      CommandSource?: string;
+      MessageThreadId?: unknown;
+    };
+    expect(payload.CommandBody).toBe("/status");
+    expect(payload.CommandSource).toBe("native");
+    expect(payload.MessageThreadId).toBeUndefined();
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-native-status-non-forum-supergroup");
+  });
+  it("does not map /quote status and /capital_status callbacks to General topic in non-forum supergroups", async () => {
+    loadConfig.mockReturnValue({
+      commands: { text: false, native: true },
+      channels: {
+        telegram: {
+          groupPolicy: "open",
+          groups: { "*": { requireMention: false } },
+          allowFrom: ["*"],
+        },
+      },
+    });
+
+    createTelegramBot({ token: "tok" });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-native-quote-status-non-forum-supergroup",
+        data: "tgcmd:/quote status",
+        from: { id: 9, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: -1001234567890, type: "supergroup", title: "Regular Supergroup" },
+          date: 1736380800,
+          message_id: 102,
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-native-capital-status-non-forum-supergroup",
+        data: "tgcmd:/capital_status",
+        from: { id: 9, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: -1001234567890, type: "supergroup", title: "Regular Supergroup" },
+          date: 1736380800,
+          message_id: 103,
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    expect(replySpy).toHaveBeenCalledTimes(2);
+    const quotePayload = replySpy.mock.calls[0]?.[0] as {
+      CommandBody?: string;
+      CommandSource?: string;
+      MessageThreadId?: unknown;
+    };
+    const capitalPayload = replySpy.mock.calls[1]?.[0] as {
+      CommandBody?: string;
+      CommandSource?: string;
+      MessageThreadId?: unknown;
+    };
+    expect(quotePayload.CommandBody).toBe("/quote status");
+    expect(quotePayload.CommandSource).toBe("native");
+    expect(quotePayload.MessageThreadId).toBeUndefined();
+    expect(capitalPayload.CommandBody).toBe("/capital_status");
+    expect(capitalPayload.CommandSource).toBe("native");
+    expect(capitalPayload.MessageThreadId).toBeUndefined();
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith(
+      "cbq-native-quote-status-non-forum-supergroup",
+    );
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith(
+      "cbq-native-capital-status-non-forum-supergroup",
+    );
+  });
+  it("handles unknown tgcmd callback command without crashing", async () => {
+    loadConfig.mockReturnValue({
+      commands: { text: false, native: true },
+      channels: {
+        telegram: {
+          dmPolicy: "open",
+          allowFrom: ["*"],
+        },
+      },
+    });
+
+    createTelegramBot({ token: "tok" });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-native-unknown",
+        data: "tgcmd:/unknown_cmd",
+        from: { id: 9, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: 1234, type: "private" },
+          date: 1736380800,
+          message_id: 12,
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    expect(replySpy).toHaveBeenCalledTimes(1);
+    const payload = replySpy.mock.calls[0]?.[0] as {
+      CommandBody?: string;
+      CommandSource?: string;
+    };
+    expect(payload.CommandBody).toBe("/unknown_cmd");
+    expect(payload.CommandSource).toBe("native");
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-native-unknown");
+  });
+  it("silently blocks /status tgcmd callback in blocked group without crashing", async () => {
+    loadConfig.mockReturnValue({
+      commands: { text: false, native: true },
+      channels: {
+        telegram: {
+          groupPolicy: "allowlist",
+          groupAllowFrom: ["99999"],
+          groups: { "*": { requireMention: false } },
+        },
+      },
+    });
+
+    createTelegramBot({ token: "tok" });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-native-status-denied",
+        data: "tgcmd:/status",
+        from: { id: 12345, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: -1001234567890, type: "supergroup", title: "Forum Group", is_forum: true },
+          date: 1736380800,
+          message_id: 13,
+          message_thread_id: 42,
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    expect(sendMessageSpy).not.toHaveBeenCalled();
+    expect(replySpy).not.toHaveBeenCalled();
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-native-status-denied");
+  });
+  it("silently blocks /status tgcmd callback when groupPolicy is disabled", async () => {
+    loadConfig.mockReturnValue({
+      commands: { text: false, native: true },
+      channels: {
+        telegram: {
+          groupPolicy: "disabled",
+          groups: { "*": { requireMention: false } },
+        },
+      },
+    });
+
+    createTelegramBot({ token: "tok" });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-native-status-group-disabled",
+        data: "tgcmd:/status",
+        from: { id: 12345, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: -1001234567890, type: "supergroup", title: "Forum Group", is_forum: true },
+          date: 1736380800,
+          message_id: 15,
+          message_thread_id: 42,
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    expect(sendMessageSpy).not.toHaveBeenCalled();
+    expect(replySpy).not.toHaveBeenCalled();
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-native-status-group-disabled");
+  });
+  it("resolves capital semi callback tokens with direct callback closure", async () => {
+    loadConfig.mockReturnValue({
+      commands: { text: false, native: true },
+      channels: {
+        telegram: {
+          dmPolicy: "open",
+          allowFrom: ["*"],
+        },
+      },
+    });
+
+    createTelegramBot({ token: "tok" });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-capital-semi-1",
+        data: "capital_semi_approve_d92b5650ca67b873",
+        from: { id: 9, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: 1234, type: "private" },
+          date: 1736380800,
+          message_id: 10,
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    expect(resolveCapitalSemiApprovalCallbackSpy).toHaveBeenCalledWith({
+      repoRoot: process.cwd(),
+      action: "approve",
+      callbackData: "capital_semi_approve_d92b5650ca67b873",
+    });
+    expect(editMessageReplyMarkupSpy).toHaveBeenCalledWith(
+      1234,
+      10,
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          inline_keyboard: [],
+        }),
+      }),
+    );
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      1234,
+      "[OpenClaw SEMI callback] 模擬回呼",
+      undefined,
+    );
+    expect(replySpy).not.toHaveBeenCalled();
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-capital-semi-1");
+  });
+  it("tolerates message-not-modified when clearing capital semi callback buttons", async () => {
+    loadConfig.mockReturnValue({
+      commands: { text: false, native: true },
+      channels: {
+        telegram: {
+          dmPolicy: "open",
+          allowFrom: ["*"],
+        },
+      },
+    });
+    editMessageReplyMarkupSpy.mockRejectedValueOnce(
+      new Error("Bad Request: message is not modified"),
+    );
+
+    createTelegramBot({ token: "tok" });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-capital-semi-not-modified",
+        data: "capital_semi_approve_d92b5650ca67b873",
+        from: { id: 9, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: 1234, type: "private" },
+          date: 1736380800,
+          message_id: 14,
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    expect(editMessageReplyMarkupSpy).toHaveBeenCalledTimes(1);
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      1234,
+      "[OpenClaw SEMI callback] 模擬回呼",
+      undefined,
+    );
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-capital-semi-not-modified");
+  });
+
+  it("tolerates nested message-not-modified payload when clearing capital semi callback buttons", async () => {
+    loadConfig.mockReturnValue({
+      commands: { text: false, native: true },
+      channels: {
+        telegram: {
+          dmPolicy: "open",
+          allowFrom: ["*"],
+        },
+      },
+    });
+    editMessageReplyMarkupSpy.mockRejectedValueOnce({
+      response: {
+        error_code: 400,
+        description:
+          "Bad Request: message is\\nnot modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message",
+      },
+    });
+
+    createTelegramBot({ token: "tok" });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-capital-semi-not-modified-nested",
+        data: "capital_semi_approve_d92b5650ca67b873",
+        from: { id: 9, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: 1234, type: "private" },
+          date: 1736380800,
+          message_id: 15,
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    expect(editMessageReplyMarkupSpy).toHaveBeenCalledTimes(1);
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      1234,
+      "[OpenClaw SEMI callback] 模擬回呼",
+      undefined,
+    );
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-capital-semi-not-modified-nested");
   });
   it("reloads callback model routing bindings without recreating the bot", async () => {
     const buildModelsProviderDataMock =
@@ -2959,7 +3567,12 @@ describe("createTelegramBot", () => {
 
     createTelegramBot({ token: "tok" });
     expect(commandSpy).toHaveBeenCalled();
-    const handler = commandSpy.mock.calls[0][1] as (ctx: Record<string, unknown>) => Promise<void>;
+    const handler = commandSpy.mock.calls.find((call) => call[0] === "status")?.[1] as
+      | ((ctx: Record<string, unknown>) => Promise<void>)
+      | undefined;
+    if (!handler) {
+      throw new Error("status command handler missing");
+    }
 
     await handler({
       ...makeForumGroupMessageCtx({ threadId: 99, text: "/status" }),
@@ -3350,7 +3963,7 @@ describe("createTelegramBot", () => {
 
     expect(buildModelsProviderDataMock).toHaveBeenCalledTimes(2);
     expect(editMessageTextSpy).toHaveBeenCalledTimes(1);
-    expect(editMessageTextSpy.mock.calls[0]?.[2]).toContain("Select a provider:");
+    expect(editMessageTextSpy.mock.calls[0]?.[2]).toContain("請選擇供應商：");
     expect(
       (
         editMessageTextSpy.mock.calls[0]?.[3] as {
@@ -3739,7 +4352,7 @@ describe("createTelegramBot", () => {
     await runMiddlewareChain(ctx);
 
     expect(editMessageTextSpy).toHaveBeenCalledTimes(2);
-    expect(editMessageTextSpy.mock.calls.at(-1)?.[2]).toContain("Select a provider:");
+    expect(editMessageTextSpy.mock.calls.at(-1)?.[2]).toContain("請選擇供應商：");
     expect(
       (
         editMessageTextSpy.mock.calls.at(-1)?.[3] as {
@@ -3806,12 +4419,10 @@ describe("createTelegramBot", () => {
 
     expect(editMessageTextSpy).toHaveBeenCalledTimes(1);
     expect(String(editMessageTextSpy.mock.calls.at(-1)?.[2] ?? "")).toContain(
-      "Session-only model selection. Runtime unchanged.",
+      "這是僅限本次會話的模型選擇，執行階段設定不變。",
     );
     expect(
-      editMessageTextSpy.mock.calls.some((call) =>
-        String(call[2] ?? "").includes("Failed to change model"),
-      ),
+      editMessageTextSpy.mock.calls.some((call) => String(call[2] ?? "").includes("切換模型失敗")),
     ).toBe(false);
   });
 });

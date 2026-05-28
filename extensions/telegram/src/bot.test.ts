@@ -8,9 +8,14 @@ import { loadSessionStore } from "openclaw/plugin-sdk/session-store-runtime";
 import { mockPinnedHostnameResolution } from "openclaw/plugin-sdk/test-env";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TelegramInteractiveHandlerContext } from "./interactive-dispatch.js";
+const buildCapitalQuoteNaturalLanguageReplyTextMock = vi.hoisted(() => vi.fn());
+vi.mock("./capital-quote-natural-language.js", () => ({
+  buildCapitalQuoteNaturalLanguageReplyText: buildCapitalQuoteNaturalLanguageReplyTextMock,
+}));
 const {
   answerCallbackQuerySpy,
   commandSpy,
+  dispatchReplyWithBufferedBlockDispatcher,
   editMessageReplyMarkupSpy,
   editMessageTextSpy,
   enqueueSystemEventSpy,
@@ -95,6 +100,8 @@ describe("createTelegramBot", () => {
   beforeEach(() => {
     setMyCommandsSpy.mockClear();
     clearPluginInteractiveHandlers();
+    readChannelAllowFromStore.mockReset();
+    readChannelAllowFromStore.mockResolvedValue([]);
     loadConfig.mockReturnValue({
       agents: {
         defaults: {
@@ -113,7 +120,79 @@ describe("createTelegramBot", () => {
         ...opts,
         telegramDeps: telegramBotDepsForTest,
       });
+    buildCapitalQuoteNaturalLanguageReplyTextMock.mockReset();
+    buildCapitalQuoteNaturalLanguageReplyTextMock.mockResolvedValue(null);
   });
+
+  const scopeGateCases = [
+    {
+      suffix: "off",
+      inlineButtons: "off" as const,
+      chat: { id: 1234, type: "private" as const },
+    },
+    {
+      suffix: "dm-on-group",
+      inlineButtons: "dm" as const,
+      chat: { id: -100999, type: "supergroup" as const, title: "Test Group" },
+    },
+    {
+      suffix: "group-on-dm",
+      inlineButtons: "group" as const,
+      chat: { id: 1234, type: "private" as const },
+    },
+  ];
+
+  const assertSilentScopeGateForCallbackData = async (params: {
+    callbackData: string;
+    idPrefix: string;
+  }) => {
+    const { callbackData, idPrefix } = params;
+    for (const testCase of scopeGateCases) {
+      onSpy.mockClear();
+      replySpy.mockClear();
+      sendMessageSpy.mockClear();
+      editMessageTextSpy.mockClear();
+      answerCallbackQuerySpy.mockClear();
+
+      createTelegramBot({
+        token: "tok",
+        config: {
+          channels: {
+            telegram: {
+              dmPolicy: "open",
+              allowFrom: ["*"],
+              capabilities: { inlineButtons: testCase.inlineButtons },
+            },
+          },
+        },
+      });
+      const callbackHandler = getOnHandler("callback_query") as (
+        ctx: Record<string, unknown>,
+      ) => Promise<void>;
+      expect(callbackHandler).toBeDefined();
+
+      const callbackId = `${idPrefix}-${testCase.suffix}`;
+      await callbackHandler({
+        callbackQuery: {
+          id: callbackId,
+          data: callbackData,
+          from: { id: 9, first_name: "Ada", username: "ada_bot" },
+          message: {
+            chat: testCase.chat,
+            date: 1736380800,
+            message_id: 118,
+          },
+        },
+        me: { username: "openclaw_bot" },
+        getFile: async () => ({ download: async () => new Uint8Array() }),
+      });
+
+      expect(answerCallbackQuerySpy).toHaveBeenCalledWith(callbackId);
+      expect(replySpy).not.toHaveBeenCalled();
+      expect(sendMessageSpy).not.toHaveBeenCalled();
+      expect(editMessageTextSpy).not.toHaveBeenCalled();
+    }
+  };
 
   it("blocks callback_query when inline buttons are allowlist-only and sender not authorized", async () => {
     onSpy.mockClear();
@@ -153,7 +232,78 @@ describe("createTelegramBot", () => {
     });
 
     expect(replySpy).not.toHaveBeenCalled();
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      1234,
+      "你沒有權限使用這個指令。",
+      expect.objectContaining({
+        reply_markup: {
+          inline_keyboard: [[{ text: "↩ 返回主選單", callback_data: "tgcmd:/start" }]],
+        },
+      }),
+    );
     expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-2");
+  });
+
+  it("allows cmd callback when sender is authorized under allowlist scope", async () => {
+    onSpy.mockClear();
+    replySpy.mockClear();
+    sendMessageSpy.mockClear();
+    editMessageTextSpy.mockClear();
+    answerCallbackQuerySpy.mockClear();
+
+    createTelegramBot({
+      token: "tok",
+      config: {
+        channels: {
+          telegram: {
+            dmPolicy: "open",
+            capabilities: { inlineButtons: "allowlist" },
+            allowFrom: ["*"],
+          },
+        },
+      },
+    });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+    expect(callbackHandler).toBeDefined();
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-cmd-allowlist-pass",
+        data: "cmd:option_b",
+        from: { id: 9, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: 1234, type: "private" },
+          date: 1736380800,
+          message_id: 111,
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-cmd-allowlist-pass");
+    expect(editMessageTextSpy).not.toHaveBeenCalled();
+    expect(sendMessageSpy).not.toHaveBeenCalled();
+    expect(replySpy).toHaveBeenCalledTimes(1);
+    const payload = replySpy.mock.calls[0]?.[0] as { RawBody?: string; BodyForCommands?: string };
+    expect(payload.RawBody).toBe("cmd:option_b");
+    expect(payload.BodyForCommands).toBe("cmd:option_b");
+  });
+
+  it("keeps scope gate matrix stable for cmd callbacks (off/dm/group mismatch)", async () => {
+    await assertSilentScopeGateForCallbackData({
+      callbackData: "cmd:scope_matrix_case",
+      idPrefix: "cbq-scope-cmd",
+    });
+  });
+
+  it("keeps scope gate matrix stable for commands_page_noop callbacks (off/dm/group mismatch)", async () => {
+    await assertSilentScopeGateForCallbackData({
+      callbackData: "commands_page_noop:main",
+      idPrefix: "cbq-scope-noop",
+    });
   });
 
   it("blocks DM model-selection callbacks for unpaired users when inline buttons are DM-scoped", async () => {
@@ -225,6 +375,7 @@ describe("createTelegramBot", () => {
   it("blocks group model-selection callbacks for senders who are not authorized for /models", async () => {
     onSpy.mockClear();
     replySpy.mockClear();
+    sendMessageSpy.mockClear();
     editMessageTextSpy.mockClear();
 
     const storePath = `/tmp/openclaw-telegram-group-model-authz-${process.pid}-${Date.now()}.json`;
@@ -285,6 +436,15 @@ describe("createTelegramBot", () => {
       });
 
       expect(replySpy).not.toHaveBeenCalled();
+      expect(sendMessageSpy).toHaveBeenCalledWith(
+        -100999,
+        "你沒有權限使用這個指令。",
+        expect.objectContaining({
+          reply_markup: {
+            inline_keyboard: [[{ text: "↩ 返回主選單", callback_data: "tgcmd:/start" }]],
+          },
+        }),
+      );
       expect(editMessageTextSpy).not.toHaveBeenCalled();
       expect(loadSessionStore(storePath, { skipCache: true })).toEqual({});
       expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-group-model-authz-1");
@@ -296,6 +456,7 @@ describe("createTelegramBot", () => {
   it("recomputes group model-selection callback auth from runtime command config", async () => {
     onSpy.mockClear();
     replySpy.mockClear();
+    sendMessageSpy.mockClear();
     editMessageTextSpy.mockClear();
 
     const storePath = `/tmp/openclaw-telegram-group-model-authz-runtime-${process.pid}-${Date.now()}.json`;
@@ -365,6 +526,15 @@ describe("createTelegramBot", () => {
       });
 
       expect(replySpy).not.toHaveBeenCalled();
+      expect(sendMessageSpy).toHaveBeenCalledWith(
+        -100999,
+        "你沒有權限使用這個指令。",
+        expect.objectContaining({
+          reply_markup: {
+            inline_keyboard: [[{ text: "↩ 返回主選單", callback_data: "tgcmd:/start" }]],
+          },
+        }),
+      );
       expect(editMessageTextSpy).not.toHaveBeenCalled();
       expect(loadSessionStore(storePath, { skipCache: true })).toEqual({});
       expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-group-model-authz-runtime-1");
@@ -616,6 +786,7 @@ describe("createTelegramBot", () => {
 
   it("blocks approval callbacks from telegram users who are not exec approvers", async () => {
     onSpy.mockClear();
+    sendMessageSpy.mockClear();
     editMessageReplyMarkupSpy.mockClear();
     editMessageTextSpy.mockClear();
     resolveExecApprovalSpy.mockClear();
@@ -658,6 +829,15 @@ describe("createTelegramBot", () => {
     expect(editMessageReplyMarkupSpy).not.toHaveBeenCalled();
     expect(editMessageTextSpy).not.toHaveBeenCalled();
     expect(resolveExecApprovalSpy).not.toHaveBeenCalled();
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      1234,
+      "你沒有權限使用這個指令。",
+      expect.objectContaining({
+        reply_markup: {
+          inline_keyboard: [[{ text: "↩ 返回主選單", callback_data: "tgcmd:/start" }]],
+        },
+      }),
+    );
     expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-approve-blocked");
   });
 
@@ -924,13 +1104,104 @@ describe("createTelegramBot", () => {
       reply_markup: {
         inline_keyboard: [
           [
-            { text: "◀ Prev", callback_data: "commands_page_1:main" },
+            { text: "◀ 上一頁", callback_data: "commands_page_1:main" },
             { text: "2/6", callback_data: "commands_page_noop:main" },
-            { text: "Next ▶", callback_data: "commands_page_3:main" },
+            { text: "下一頁 ▶", callback_data: "commands_page_3:main" },
           ],
         ],
       },
     });
+  });
+
+  it("treats nested not-modified payload as no-op for pagination callbacks", async () => {
+    onSpy.mockClear();
+    listSkillCommandsForAgents.mockClear();
+    sendMessageSpy.mockClear();
+    replySpy.mockClear();
+    editMessageTextSpy.mockClear();
+    answerCallbackQuerySpy.mockClear();
+    editMessageTextSpy.mockRejectedValueOnce({
+      response: {
+        error_code: 400,
+        description:
+          "Bad Request: message is\\nnot modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message",
+      },
+    });
+
+    createTelegramBot({ token: "tok" });
+    const callbackHandler = onSpy.mock.calls.find((call) => call[0] === "callback_query")?.[1] as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+    expect(callbackHandler).toBeDefined();
+
+    await expect(
+      callbackHandler({
+        callbackQuery: {
+          id: "cbq-pagination-not-modified-nested",
+          data: "commands_page_2:main",
+          from: { id: 9, first_name: "Ada", username: "ada_bot" },
+          message: {
+            chat: { id: 1234, type: "private" },
+            date: 1736380800,
+            message_id: 212,
+          },
+        },
+        me: { username: "openclaw_bot" },
+        getFile: async () => ({ download: async () => new Uint8Array() }),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(editMessageTextSpy).toHaveBeenCalledTimes(1);
+    expect(sendMessageSpy).not.toHaveBeenCalled();
+    expect(replySpy).not.toHaveBeenCalled();
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-pagination-not-modified-nested");
+  });
+
+  it("acknowledges authorized commands_page_noop callbacks without emitting chat output", async () => {
+    onSpy.mockClear();
+    replySpy.mockClear();
+    sendMessageSpy.mockClear();
+    editMessageTextSpy.mockClear();
+    answerCallbackQuerySpy.mockClear();
+    listSkillCommandsForAgents.mockClear();
+
+    createTelegramBot({
+      token: "tok",
+      config: {
+        channels: {
+          telegram: {
+            dmPolicy: "open",
+            allowFrom: ["*"],
+            capabilities: { inlineButtons: "allowlist" },
+          },
+        },
+      },
+    });
+    const callbackHandler = onSpy.mock.calls.find((call) => call[0] === "callback_query")?.[1] as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+    expect(callbackHandler).toBeDefined();
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-noop-authorized",
+        data: "commands_page_noop:main",
+        from: { id: 9, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: 1234, type: "private" },
+          date: 1736380800,
+          message_id: 15,
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-noop-authorized");
+    expect(listSkillCommandsForAgents).not.toHaveBeenCalled();
+    expect(editMessageTextSpy).not.toHaveBeenCalled();
+    expect(sendMessageSpy).not.toHaveBeenCalled();
+    expect(replySpy).not.toHaveBeenCalled();
   });
 
   it("falls back to default agent for pagination callbacks without agent suffix", async () => {
@@ -968,6 +1239,7 @@ describe("createTelegramBot", () => {
   it("blocks pagination callbacks when allowlist rejects sender", async () => {
     onSpy.mockClear();
     editMessageTextSpy.mockClear();
+    sendMessageSpy.mockClear();
 
     createTelegramBot({
       token: "tok",
@@ -1002,6 +1274,15 @@ describe("createTelegramBot", () => {
     });
 
     expect(editMessageTextSpy).not.toHaveBeenCalled();
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      1234,
+      "你沒有權限使用這個指令。",
+      expect.objectContaining({
+        reply_markup: {
+          inline_keyboard: [[{ text: "↩ 返回主選單", callback_data: "tgcmd:/start" }]],
+        },
+      }),
+    );
     expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-4");
   });
 
@@ -1059,10 +1340,10 @@ describe("createTelegramBot", () => {
       expect(replySpy).not.toHaveBeenCalled();
       expect(editMessageTextSpy).toHaveBeenCalledTimes(1);
       expect(editMessageTextSpy.mock.calls[0]?.[2]).toContain(
-        `${CHECK_MARK_EMOJI} Model reset to default`,
+        `${CHECK_MARK_EMOJI} 模型已重設為預設模型`,
       );
       expect(editMessageTextSpy.mock.calls[0]?.[2]).toContain(
-        "Session selection cleared. Runtime unchanged. New replies use the agent's configured default.",
+        "已清除本次會話的模型選擇。執行階段設定不變；後續回覆會使用 agent 預設模型。",
       );
 
       const entry = Object.values(loadSessionStore(storePath, { skipCache: true }))[0];
@@ -1150,6 +1431,76 @@ describe("createTelegramBot", () => {
     expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-model-display-names-1");
   });
 
+  it("treats nested not-modified payload as no-op for model list callbacks", async () => {
+    onSpy.mockClear();
+    replySpy.mockClear();
+    sendMessageSpy.mockClear();
+    editMessageTextSpy.mockClear();
+    answerCallbackQuerySpy.mockClear();
+    editMessageTextSpy.mockRejectedValueOnce({
+      response: {
+        error_code: 400,
+        description:
+          "Bad Request: message is\\nnot modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message",
+      },
+    });
+
+    const buildModelsProviderDataMock =
+      telegramBotDepsForTest.buildModelsProviderData as unknown as ReturnType<typeof vi.fn>;
+    buildModelsProviderDataMock.mockResolvedValueOnce({
+      byProvider: new Map<string, Set<string>>([["openai", new Set(["gpt-5", "gpt-4.1"])]]),
+      providers: ["openai"],
+      resolvedDefault: { provider: "openai", model: "gpt-5" },
+      modelNames: new Map<string, string>(),
+    });
+
+    const config = {
+      agents: {
+        defaults: {
+          model: "openai/gpt-5",
+        },
+      },
+      channels: {
+        telegram: {
+          dmPolicy: "open",
+          allowFrom: ["*"],
+        },
+      },
+    } satisfies NonNullable<Parameters<typeof createTelegramBot>[0]["config"]>;
+
+    loadConfig.mockReturnValue(config);
+    createTelegramBot({
+      token: "tok",
+      config,
+    });
+    const callbackHandler = onSpy.mock.calls.find((call) => call[0] === "callback_query")?.[1] as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+    expect(callbackHandler).toBeDefined();
+
+    await expect(
+      callbackHandler({
+        callbackQuery: {
+          id: "cbq-model-list-not-modified-nested",
+          data: "mdl_list_openai_1",
+          from: { id: 9, first_name: "Ada", username: "ada_bot" },
+          message: {
+            chat: { id: 1234, type: "private" },
+            date: 1736380800,
+            message_id: 313,
+          },
+        },
+        me: { username: "openclaw_bot" },
+        getFile: async () => ({ download: async () => new Uint8Array() }),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(editMessageTextSpy).toHaveBeenCalledTimes(1);
+    expect(sendMessageSpy).not.toHaveBeenCalled();
+    expect(replySpy).not.toHaveBeenCalled();
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-model-list-not-modified-nested");
+  });
+
   it("resets overrides when selecting the configured default model", async () => {
     onSpy.mockClear();
     replySpy.mockClear();
@@ -1206,10 +1557,10 @@ describe("createTelegramBot", () => {
       expect(replySpy).not.toHaveBeenCalled();
       expect(editMessageTextSpy).toHaveBeenCalledTimes(1);
       expect(editMessageTextSpy.mock.calls[0]?.[2]).toContain(
-        `${CHECK_MARK_EMOJI} Model reset to default`,
+        `${CHECK_MARK_EMOJI} 模型已重設為預設模型`,
       );
       expect(editMessageTextSpy.mock.calls[0]?.[2]).toContain(
-        "Session selection cleared. Runtime unchanged. New replies use the agent's configured default.",
+        "已清除本次會話的模型選擇。執行階段設定不變；後續回覆會使用 agent 預設模型。",
       );
 
       const entry = Object.values(loadSessionStore(storePath, { skipCache: true }))[0];
@@ -1281,7 +1632,7 @@ describe("createTelegramBot", () => {
       expect(editMessageTextSpy).toHaveBeenCalledWith(
         1234,
         17,
-        `${CHECK_MARK_EMOJI} Model changed to <b>openai/gpt-5.4</b>\n\nSession-only model selection. Runtime unchanged. Use /model openai/gpt-5.4 --runtime &lt;runtime&gt; to switch harnesses. The agent default in openclaw.json is unchanged; /reset or a new session may return to that default.`,
+        `${CHECK_MARK_EMOJI} 模型已切換為 <b>openai/gpt-5.4</b>\n\n這是僅限本次會話的模型選擇，執行階段設定不變。若要切換執行器，請使用 /model openai/gpt-5.4 --runtime &lt;runtime&gt;。openclaw.json 的 agent 預設值不會變更；/reset 或新會話可能回到預設。`,
         expect.objectContaining({ parse_mode: "HTML" }),
       );
 
@@ -1428,9 +1779,7 @@ describe("createTelegramBot", () => {
 
     expect(replySpy).not.toHaveBeenCalled();
     expect(editMessageTextSpy).toHaveBeenCalledTimes(1);
-    expect(editMessageTextSpy.mock.calls[0]?.[2]).toContain(
-      'Could not resolve model "shared-model".',
-    );
+    expect(editMessageTextSpy.mock.calls[0]?.[2]).toContain("無法解析模型「shared-model」。");
     expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-model-compact-2");
   });
 
@@ -2177,9 +2526,1209 @@ describe("createTelegramBot", () => {
       getFile: async () => ({ download: async () => new Uint8Array() }),
     });
 
-    expect(editMessageTextSpy).toHaveBeenCalledWith(1234, 11, "Handled resume:thread-1", undefined);
+    expect(editMessageTextSpy).toHaveBeenCalledWith(1234, 11, "Handled resume:thread-1", {});
     expect(replySpy).not.toHaveBeenCalled();
   });
+
+  it("replies fallback text when plugin callback handler throws unexpectedly", async () => {
+    onSpy.mockClear();
+    replySpy.mockClear();
+    sendMessageSpy.mockClear();
+    registerPluginInteractiveHandler("codex-plugin", {
+      channel: "telegram",
+      namespace: "codexapp",
+      handler: (async () => {
+        throw new Error("unexpected callback failure");
+      }) as never,
+    });
+
+    createTelegramBot({
+      token: "tok",
+      config: {
+        channels: {
+          telegram: {
+            dmPolicy: "open",
+            allowFrom: ["*"],
+          },
+        },
+      },
+    });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await expect(
+      callbackHandler({
+        callbackQuery: {
+          id: "cbq-codex-throw-1",
+          data: "codexapp:resume:thread-1",
+          from: { id: 9, first_name: "Ada", username: "ada_bot" },
+          message: {
+            chat: { id: 1234, type: "private" },
+            date: 1736380800,
+            message_id: 11,
+            text: "Select a thread",
+          },
+        },
+        me: { username: "openclaw_bot" },
+        getFile: async () => ({ download: async () => new Uint8Array() }),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      1234,
+      "處理你的請求時發生錯誤，請稍後再試。",
+      expect.objectContaining({
+        reply_markup: {
+          inline_keyboard: [[{ text: "↩ 返回主選單", callback_data: "tgcmd:/start" }]],
+        },
+      }),
+    );
+    expect(replySpy).not.toHaveBeenCalled();
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-codex-throw-1");
+  });
+
+  it("replies clearly when sc callback has no registered interactive handler", async () => {
+    onSpy.mockClear();
+    sendMessageSpy.mockClear();
+    replySpy.mockClear();
+
+    createTelegramBot({
+      token: "tok",
+      config: {
+        channels: {
+          telegram: {
+            dmPolicy: "open",
+            allowFrom: ["*"],
+          },
+        },
+      },
+    });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await expect(
+      callbackHandler({
+        callbackQuery: {
+          id: "cbq-sc-missing-handler",
+          data: "sc:tr:paper",
+          from: { id: 9, first_name: "Ada", username: "ada_bot" },
+          message: {
+            chat: { id: 1234, type: "private" },
+            date: 1736380800,
+            message_id: 11,
+            text: "交易面板",
+          },
+        },
+        me: { username: "openclaw_bot" },
+        getFile: async () => ({ download: async () => new Uint8Array() }),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      1234,
+      expect.stringContaining("控制面板尚未啟用"),
+      expect.objectContaining({
+        reply_markup: {
+          inline_keyboard: [[{ text: "↩ 返回主選單", callback_data: "tgcmd:/start" }]],
+        },
+      }),
+    );
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-sc-missing-handler");
+    expect(replySpy).not.toHaveBeenCalled();
+  });
+
+  it("returns generic error reply for quote-like callback text when dispatcher and quote fallback both fail", async () => {
+    onSpy.mockClear();
+    sendMessageSpy.mockClear();
+    replySpy.mockClear();
+    dispatchReplyWithBufferedBlockDispatcher.mockRejectedValueOnce(
+      new Error("dispatcher exploded"),
+    );
+    buildCapitalQuoteNaturalLanguageReplyTextMock.mockRejectedValue(
+      new Error("quote resolver failed"),
+    );
+
+    createTelegramBot({
+      token: "tok",
+      config: {
+        channels: {
+          telegram: {
+            dmPolicy: "open",
+            allowFrom: ["*"],
+          },
+        },
+      },
+    });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await expect(
+      callbackHandler({
+        callbackQuery: {
+          id: "cbq-quote-fallback-throw",
+          data: "自動交易A50指",
+          from: { id: 9, first_name: "Ada", username: "ada_bot" },
+          message: {
+            chat: { id: 1234, type: "private" },
+            date: 1736380800,
+            message_id: 11,
+            text: "交易面板",
+          },
+        },
+        me: { username: "openclaw_bot" },
+        getFile: async () => ({ download: async () => new Uint8Array() }),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      "1234",
+      "處理你的請求時發生錯誤，請稍後再試。",
+      expect.objectContaining({
+        parse_mode: "HTML",
+      }),
+    );
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-quote-fallback-throw");
+    expect(replySpy).not.toHaveBeenCalled();
+  });
+
+  it("returns quote reply for direct natural-language trading text", async () => {
+    onSpy.mockClear();
+    sendMessageSpy.mockClear();
+    replySpy.mockClear();
+    buildCapitalQuoteNaturalLanguageReplyTextMock.mockResolvedValueOnce(
+      "[OpenClaw 報價] A50指熱2605 CN0000｜狀態=即時",
+    );
+
+    createTelegramBot({
+      token: "tok",
+      config: {
+        channels: {
+          telegram: {
+            dmPolicy: "open",
+            allowFrom: ["*"],
+          },
+        },
+      },
+    });
+
+    const messageHandler = getOnHandler("message") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+    await messageHandler({
+      message: {
+        chat: { id: 1234, type: "private" },
+        from: { id: 9, first_name: "Ada", username: "ada_bot" },
+        text: "自動交易A50指",
+        message_id: 77,
+        date: 1736380800,
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    expect(buildCapitalQuoteNaturalLanguageReplyTextMock).toHaveBeenCalledWith({
+      text: "自動交易A50指",
+      repoRoot: expect.any(String),
+    });
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      1234,
+      "[OpenClaw 報價] A50指熱2605 CN0000｜狀態=即時",
+      expect.objectContaining({
+        reply_parameters: expect.objectContaining({
+          message_id: 77,
+          allow_sending_without_reply: true,
+        }),
+      }),
+    );
+    expect(replySpy).not.toHaveBeenCalled();
+  });
+
+  it("keeps generic error reply when dispatcher and quote fallback resolver both fail", async () => {
+    onSpy.mockClear();
+    sendMessageSpy.mockClear();
+    replySpy.mockClear();
+    dispatchReplyWithBufferedBlockDispatcher.mockRejectedValueOnce(
+      new Error("dispatcher exploded"),
+    );
+    buildCapitalQuoteNaturalLanguageReplyTextMock.mockRejectedValueOnce(
+      new Error("quote resolver failed"),
+    );
+
+    createTelegramBot({
+      token: "tok",
+      config: {
+        channels: {
+          telegram: {
+            dmPolicy: "open",
+            allowFrom: ["*"],
+          },
+        },
+      },
+    });
+
+    const messageHandler = getOnHandler("message") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+    await expect(
+      messageHandler({
+        message: {
+          chat: { id: 1234, type: "private" },
+          from: { id: 9, first_name: "Ada", username: "ada_bot" },
+          text: "自動交易A50指",
+          message_id: 88,
+          date: 1736380800,
+        },
+        me: { username: "openclaw_bot" },
+        getFile: async () => ({ download: async () => new Uint8Array() }),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(buildCapitalQuoteNaturalLanguageReplyTextMock).toHaveBeenCalledWith({
+      text: "自動交易A50指",
+      repoRoot: expect.any(String),
+    });
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      "1234",
+      "處理你的請求時發生錯誤，請稍後再試。",
+      expect.objectContaining({
+        parse_mode: "HTML",
+      }),
+    );
+    expect(replySpy).not.toHaveBeenCalled();
+  });
+
+  it("renders a native main menu for tgcmd:/start callback", async () => {
+    onSpy.mockClear();
+    replySpy.mockClear();
+    sendMessageSpy.mockClear();
+
+    createTelegramBot({
+      token: "tok",
+      config: {
+        commands: { text: false, native: true },
+        channels: {
+          telegram: {
+            dmPolicy: "open",
+            allowFrom: ["*"],
+          },
+        },
+      },
+    });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await expect(
+      callbackHandler({
+        callbackQuery: {
+          id: "cbq-return-main-menu",
+          data: "tgcmd:/start",
+          from: { id: 9, first_name: "Ada", username: "ada_bot" },
+          message: {
+            chat: { id: 1234, type: "private" },
+            date: 1736380800,
+            message_id: 12,
+            text: "控制面板尚未啟用",
+          },
+        },
+        me: { username: "openclaw_bot" },
+        getFile: async () => ({ download: async () => new Uint8Array() }),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      1234,
+      expect.stringContaining("主選單"),
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          inline_keyboard: [
+            [{ text: "🛰 中控狀態", callback_data: "tgcmd:/status" }],
+            [{ text: "📊 報價狀態", callback_data: "tgcmd:/quote status" }],
+            [{ text: "🧭 交易總覽", callback_data: "tgcmd:/capital_status" }],
+            [{ text: "🪙 OKX 狀態", callback_data: "tgcmd:/okx_status" }],
+            [{ text: "🟢 模擬下單（買）", callback_data: "tgcmd:/quote simlive tx00 buy 1" }],
+            [{ text: "🔥 真實下單（買）", callback_data: "tgcmd:/quote live cn0000 buy 1" }],
+          ],
+        }),
+      }),
+    );
+    expect(replySpy).not.toHaveBeenCalled();
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-return-main-menu");
+  });
+
+  it("opens the same main menu from sc fallback return button callback", async () => {
+    onSpy.mockClear();
+    replySpy.mockClear();
+    sendMessageSpy.mockClear();
+
+    createTelegramBot({
+      token: "tok",
+      config: {
+        commands: { text: false, native: true },
+        channels: {
+          telegram: {
+            dmPolicy: "open",
+            allowFrom: ["*"],
+          },
+        },
+      },
+    });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-sc-menu-1",
+        data: "sc:tr:paper",
+        from: { id: 9, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: 1234, type: "private" },
+          date: 1736380800,
+          message_id: 21,
+          text: "交易面板",
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    const fallbackOptions = sendMessageSpy.mock.calls[0]?.[2] as
+      | {
+          reply_markup?: {
+            inline_keyboard?: Array<Array<{ callback_data?: string }>>;
+          };
+        }
+      | undefined;
+    const fallbackReturnCallbackData =
+      fallbackOptions?.reply_markup?.inline_keyboard?.[0]?.[0]?.callback_data;
+    expect(fallbackReturnCallbackData).toBe("tgcmd:/start");
+
+    await callbackHandler({
+      callbackQuery: {
+        id: "cbq-sc-menu-2",
+        data: fallbackReturnCallbackData ?? "tgcmd:/start",
+        from: { id: 9, first_name: "Ada", username: "ada_bot" },
+        message: {
+          chat: { id: 1234, type: "private" },
+          date: 1736380800,
+          message_id: 22,
+          text: "控制面板尚未啟用",
+        },
+      },
+      me: { username: "openclaw_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    expect(sendMessageSpy).toHaveBeenCalledTimes(2);
+    expect(sendMessageSpy.mock.calls[1]?.[1]).toContain("主選單");
+    expect(sendMessageSpy.mock.calls[1]?.[2]).toEqual(
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          inline_keyboard: [
+            [{ text: "🛰 中控狀態", callback_data: "tgcmd:/status" }],
+            [{ text: "📊 報價狀態", callback_data: "tgcmd:/quote status" }],
+            [{ text: "🧭 交易總覽", callback_data: "tgcmd:/capital_status" }],
+            [{ text: "🪙 OKX 狀態", callback_data: "tgcmd:/okx_status" }],
+            [{ text: "🟢 模擬下單（買）", callback_data: "tgcmd:/quote simlive tx00 buy 1" }],
+            [{ text: "🔥 真實下單（買）", callback_data: "tgcmd:/quote live cn0000 buy 1" }],
+          ],
+        }),
+      }),
+    );
+    expect(replySpy).not.toHaveBeenCalled();
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-sc-menu-1");
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-sc-menu-2");
+  });
+
+  it("treats plugin callback edit MESSAGE_NOT_MODIFIED as a successful no-op", async () => {
+    onSpy.mockClear();
+    replySpy.mockClear();
+    sendMessageSpy.mockClear();
+    editMessageTextSpy.mockClear();
+    editMessageTextSpy.mockRejectedValueOnce(
+      new Error(
+        "400: Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message",
+      ),
+    );
+    registerPluginInteractiveHandler("codex-plugin", {
+      channel: "telegram",
+      namespace: "codexapp",
+      handler: (async ({ respond, callback }: TelegramInteractiveHandlerContext) => {
+        await respond.editMessage({
+          text: `Handled ${callback.payload}`,
+        });
+        return { handled: true };
+      }) as never,
+    });
+
+    createTelegramBot({
+      token: "tok",
+      config: {
+        channels: {
+          telegram: {
+            dmPolicy: "open",
+            allowFrom: ["*"],
+          },
+        },
+      },
+    });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await expect(
+      callbackHandler({
+        callbackQuery: {
+          id: "cbq-codex-not-modified",
+          data: "codexapp:resume:thread-1",
+          from: { id: 9, first_name: "Ada", username: "ada_bot" },
+          message: {
+            chat: { id: 1234, type: "private" },
+            date: 1736380800,
+            message_id: 11,
+            text: "Select a thread",
+          },
+        },
+        me: { username: "openclaw_bot" },
+        getFile: async () => ({ download: async () => new Uint8Array() }),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(editMessageTextSpy).toHaveBeenCalledWith(1234, 11, "Handled resume:thread-1", {});
+    expect(sendMessageSpy).toHaveBeenCalledWith(1234, "ℹ️ 畫面已是最新狀態。", undefined);
+    expect(replySpy).not.toHaveBeenCalled();
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-codex-not-modified");
+  });
+
+  it("treats nested callback edit not-modified payload as a successful no-op", async () => {
+    onSpy.mockClear();
+    replySpy.mockClear();
+    sendMessageSpy.mockClear();
+    editMessageTextSpy.mockClear();
+    editMessageTextSpy.mockRejectedValueOnce({
+      response: {
+        error_code: 400,
+        description:
+          "Bad Request: message is\\nnot modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message",
+      },
+    });
+    registerPluginInteractiveHandler("codex-plugin", {
+      channel: "telegram",
+      namespace: "codexapp",
+      handler: (async ({ respond, callback }: TelegramInteractiveHandlerContext) => {
+        await respond.editMessage({
+          text: `Handled ${callback.payload}`,
+        });
+        return { handled: true };
+      }) as never,
+    });
+
+    createTelegramBot({
+      token: "tok",
+      config: {
+        channels: {
+          telegram: {
+            dmPolicy: "open",
+            allowFrom: ["*"],
+          },
+        },
+      },
+    });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await expect(
+      callbackHandler({
+        callbackQuery: {
+          id: "cbq-codex-not-modified-nested",
+          data: "codexapp:resume:thread-2",
+          from: { id: 9, first_name: "Ada", username: "ada_bot" },
+          message: {
+            chat: { id: 1234, type: "private" },
+            date: 1736380800,
+            message_id: 12,
+            text: "Select a thread",
+          },
+        },
+        me: { username: "openclaw_bot" },
+        getFile: async () => ({ download: async () => new Uint8Array() }),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(editMessageTextSpy).toHaveBeenCalledWith(1234, 12, "Handled resume:thread-2", {});
+    expect(sendMessageSpy).toHaveBeenCalledWith(1234, "ℹ️ 畫面已是最新狀態。", undefined);
+    expect(replySpy).not.toHaveBeenCalled();
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-codex-not-modified-nested");
+  });
+
+  it("dedupes repeated up-to-date notice for the same callback payload and message", async () => {
+    onSpy.mockClear();
+    replySpy.mockClear();
+    sendMessageSpy.mockClear();
+    editMessageTextSpy.mockClear();
+    editMessageTextSpy.mockRejectedValue(
+      new Error(
+        "400: Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message",
+      ),
+    );
+    registerPluginInteractiveHandler("codex-plugin", {
+      channel: "telegram",
+      namespace: "codexapp",
+      handler: (async ({ respond, callback }: TelegramInteractiveHandlerContext) => {
+        await respond.editMessage({
+          text: `Handled ${callback.payload}`,
+        });
+        return { handled: true };
+      }) as never,
+    });
+
+    createTelegramBot({
+      token: "tok",
+      config: {
+        channels: {
+          telegram: {
+            dmPolicy: "open",
+            allowFrom: ["*"],
+          },
+        },
+      },
+    });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await expect(
+      callbackHandler({
+        callbackQuery: {
+          id: "cbq-codex-not-modified-dedup-1",
+          data: "codexapp:resume:thread-dedup",
+          from: { id: 9, first_name: "Ada", username: "ada_bot" },
+          message: {
+            chat: { id: 4321, type: "private" },
+            date: 1736380800,
+            message_id: 99,
+            text: "Select a thread",
+          },
+        },
+        me: { username: "openclaw_bot" },
+        getFile: async () => ({ download: async () => new Uint8Array() }),
+      }),
+    ).resolves.toBeUndefined();
+
+    await expect(
+      callbackHandler({
+        callbackQuery: {
+          id: "cbq-codex-not-modified-dedup-2",
+          data: "codexapp:resume:thread-dedup",
+          from: { id: 9, first_name: "Ada", username: "ada_bot" },
+          message: {
+            chat: { id: 4321, type: "private" },
+            date: 1736380801,
+            message_id: 99,
+            text: "Select a thread",
+          },
+        },
+        me: { username: "openclaw_bot" },
+        getFile: async () => ({ download: async () => new Uint8Array() }),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(editMessageTextSpy).toHaveBeenCalledTimes(2);
+    expect(sendMessageSpy).toHaveBeenCalledTimes(1);
+    expect(sendMessageSpy).toHaveBeenCalledWith(4321, "ℹ️ 畫面已是最新狀態。", undefined);
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-codex-not-modified-dedup-1");
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-codex-not-modified-dedup-2");
+  });
+
+  it("dedupes repeated up-to-date notice for nested not-modified payloads on the same callback", async () => {
+    onSpy.mockClear();
+    replySpy.mockClear();
+    sendMessageSpy.mockClear();
+    editMessageTextSpy.mockClear();
+    editMessageTextSpy.mockRejectedValue({
+      response: {
+        error_code: 400,
+        description:
+          "Bad Request: message is\\nnot modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message",
+      },
+    });
+    registerPluginInteractiveHandler("codex-plugin", {
+      channel: "telegram",
+      namespace: "codexapp",
+      handler: (async ({ respond, callback }: TelegramInteractiveHandlerContext) => {
+        await respond.editMessage({
+          text: `Handled ${callback.payload}`,
+        });
+        return { handled: true };
+      }) as never,
+    });
+
+    createTelegramBot({
+      token: "tok",
+      config: {
+        channels: {
+          telegram: {
+            dmPolicy: "open",
+            allowFrom: ["*"],
+          },
+        },
+      },
+    });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await expect(
+      callbackHandler({
+        callbackQuery: {
+          id: "cbq-codex-not-modified-nested-dedup-1",
+          data: "codexapp:resume:thread-nested-dedup",
+          from: { id: 9, first_name: "Ada", username: "ada_bot" },
+          message: {
+            chat: { id: 5432, type: "private" },
+            date: 1736380800,
+            message_id: 109,
+            text: "Select a thread",
+          },
+        },
+        me: { username: "openclaw_bot" },
+        getFile: async () => ({ download: async () => new Uint8Array() }),
+      }),
+    ).resolves.toBeUndefined();
+
+    await expect(
+      callbackHandler({
+        callbackQuery: {
+          id: "cbq-codex-not-modified-nested-dedup-2",
+          data: "codexapp:resume:thread-nested-dedup",
+          from: { id: 9, first_name: "Ada", username: "ada_bot" },
+          message: {
+            chat: { id: 5432, type: "private" },
+            date: 1736380801,
+            message_id: 109,
+            text: "Select a thread",
+          },
+        },
+        me: { username: "openclaw_bot" },
+        getFile: async () => ({ download: async () => new Uint8Array() }),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(editMessageTextSpy).toHaveBeenCalledTimes(2);
+    expect(sendMessageSpy).toHaveBeenCalledTimes(1);
+    expect(sendMessageSpy).toHaveBeenCalledWith(5432, "ℹ️ 畫面已是最新狀態。", undefined);
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-codex-not-modified-nested-dedup-1");
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-codex-not-modified-nested-dedup-2");
+  });
+
+  it.each([
+    { data: "sc:home", callbackId: "cbq-sc-no-visible-output-home", messageId: 31 },
+    { data: "sc:stat", callbackId: "cbq-sc-no-visible-output-stat", messageId: 32 },
+    { data: "sc:trade", callbackId: "cbq-sc-no-visible-output-trade", messageId: 33 },
+  ])(
+    "shows fallback and callback trace when $data handler returns handled without visible output",
+    async ({ data, callbackId, messageId }) => {
+      onSpy.mockClear();
+      replySpy.mockClear();
+      sendMessageSpy.mockClear();
+      editMessageTextSpy.mockClear();
+      enqueueSystemEventSpy.mockClear();
+      registerPluginInteractiveHandler("automation-plugin", {
+        channel: "telegram",
+        namespace: "sc",
+        handler: (async () => ({ handled: true })) as never,
+      });
+
+      createTelegramBot({
+        token: "tok",
+        config: {
+          channels: {
+            telegram: {
+              dmPolicy: "open",
+              allowFrom: ["*"],
+            },
+          },
+        },
+      });
+      const callbackHandler = getOnHandler("callback_query") as (
+        ctx: Record<string, unknown>,
+      ) => Promise<void>;
+
+      await expect(
+        callbackHandler({
+          callbackQuery: {
+            id: callbackId,
+            data,
+            from: { id: 9, first_name: "Ada", username: "ada_bot" },
+            message: {
+              chat: { id: 7777, type: "private" },
+              date: 1736380800,
+              message_id: messageId,
+              text: "Control panel",
+            },
+          },
+          me: { username: "openclaw_bot" },
+          getFile: async () => ({ download: async () => new Uint8Array() }),
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(editMessageTextSpy).not.toHaveBeenCalled();
+      expect(replySpy).not.toHaveBeenCalled();
+      expect(sendMessageSpy).toHaveBeenCalledWith(
+        7777,
+        "ℹ️ 已收到操作，但目前沒有可顯示內容。\n請按「返回首頁」重整控制面板後再試。",
+        expect.objectContaining({
+          reply_markup: expect.objectContaining({
+            inline_keyboard: expect.any(Array),
+          }),
+        }),
+      );
+      expect(enqueueSystemEventSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`[telegram callback trace] data=${data}`),
+        expect.objectContaining({
+          contextKey: expect.stringContaining(
+            `telegram:callback:trace:7777:${messageId}:${callbackId}`,
+          ),
+        }),
+      );
+      expect(answerCallbackQuerySpy).toHaveBeenCalledWith(callbackId);
+    },
+  );
+
+  it("shows trade-specific fallback with assistant/write quick actions for sc:tr callbacks without visible output", async () => {
+    onSpy.mockClear();
+    replySpy.mockClear();
+    sendMessageSpy.mockClear();
+    editMessageTextSpy.mockClear();
+    registerPluginInteractiveHandler("automation-plugin", {
+      channel: "telegram",
+      namespace: "sc",
+      handler: (async ({ callback }) => {
+        if (callback.payload === "tr:assist") {
+          return { handled: true };
+        }
+        return { handled: false };
+      }) as never,
+    });
+
+    createTelegramBot({
+      token: "tok",
+      config: {
+        channels: {
+          telegram: {
+            dmPolicy: "open",
+            allowFrom: ["*"],
+          },
+        },
+      },
+    });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await expect(
+      callbackHandler({
+        callbackQuery: {
+          id: "cbq-sc-tr-no-visible-output-assist",
+          data: "sc:tr:assist",
+          from: { id: 9, first_name: "Ada", username: "ada_bot" },
+          message: {
+            chat: { id: 7777, type: "private" },
+            date: 1736380800,
+            message_id: 35,
+            text: "Control panel",
+          },
+        },
+        me: { username: "openclaw_bot" },
+        getFile: async () => ({ download: async () => new Uint8Array() }),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      7777,
+      "ℹ️ 已收到「模擬助手」操作，但目前沒有可顯示內容。\n請按「模擬助手」重試，或按「寫入票據」查看最新狀態。",
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          inline_keyboard: expect.arrayContaining([
+            expect.arrayContaining([
+              expect.objectContaining({ text: "🧠 模擬助手", callback_data: "sc:tr:assist" }),
+              expect.objectContaining({ text: "✍️ 寫入票據", callback_data: "sc:tr:write" }),
+            ]),
+            expect.arrayContaining([
+              expect.objectContaining({ text: "← 返回交易", callback_data: "sc:trade" }),
+              expect.objectContaining({ text: "← 返回首頁", callback_data: "sc:home" }),
+            ]),
+          ]),
+        }),
+      }),
+    );
+    expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-sc-tr-no-visible-output-assist");
+  });
+
+  it.each([
+    {
+      data: "sc:tr:write",
+      callbackId: "cbq-sc-tr-no-visible-output-write",
+      messageId: 36,
+      expectedText:
+        "ℹ️ 已收到「寫入審核票」操作，但目前沒有可顯示內容。\n請先按「實單阻擋」檢查 Gateway，再按「寫入票據」重試。",
+      expectedButtons: ["sc:tr:write", "sc:tr:live", "sc:trade", "sc:home"],
+      expectedTradeCode: "gateway_not_ready",
+    },
+    {
+      data: "sc:tr:approve",
+      callbackId: "cbq-sc-tr-no-visible-output-approve",
+      messageId: 37,
+      expectedText:
+        "ℹ️ 已收到「核准模擬執行」操作，但目前沒有可顯示內容。\n請先按「寫入票據」，再按「審核紀錄」確認最新狀態。",
+      expectedButtons: ["sc:tr:write", "sc:tr:audit", "sc:trade", "sc:home"],
+      expectedTradeCode: "manual_review_required",
+    },
+    {
+      data: "sc:tr:audit:all_0",
+      callbackId: "cbq-sc-tr-no-visible-output-audit",
+      messageId: 38,
+      expectedText:
+        "ℹ️ 已收到「審核紀錄」操作，但目前沒有可顯示內容。\n請按「審核紀錄」重試，或按「返回交易」重新載入。",
+      expectedButtons: ["sc:tr:audit", "sc:tr:paperloop", "sc:trade", "sc:home"],
+      expectedTradeCode: "audit_snapshot_missing",
+    },
+  ])(
+    "shows command-specific trade fallback when $data handler returns handled without visible output",
+    async ({ data, callbackId, messageId, expectedText, expectedButtons, expectedTradeCode }) => {
+      onSpy.mockClear();
+      replySpy.mockClear();
+      sendMessageSpy.mockClear();
+      editMessageTextSpy.mockClear();
+      enqueueSystemEventSpy.mockClear();
+      registerPluginInteractiveHandler("automation-plugin", {
+        channel: "telegram",
+        namespace: "sc",
+        handler: (async ({ callback }) => {
+          if (callback.payload === data.replace("sc:", "")) {
+            return { handled: true };
+          }
+          return { handled: false };
+        }) as never,
+      });
+
+      createTelegramBot({
+        token: "tok",
+        config: {
+          channels: {
+            telegram: {
+              dmPolicy: "open",
+              allowFrom: ["*"],
+            },
+          },
+        },
+      });
+      const callbackHandler = getOnHandler("callback_query") as (
+        ctx: Record<string, unknown>,
+      ) => Promise<void>;
+
+      await expect(
+        callbackHandler({
+          callbackQuery: {
+            id: callbackId,
+            data,
+            from: { id: 9, first_name: "Ada", username: "ada_bot" },
+            message: {
+              chat: { id: 7777, type: "private" },
+              date: 1736380800,
+              message_id: messageId,
+              text: "Control panel",
+            },
+          },
+          me: { username: "openclaw_bot" },
+          getFile: async () => ({ download: async () => new Uint8Array() }),
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(sendMessageSpy).toHaveBeenCalledWith(
+        7777,
+        expectedText,
+        expect.objectContaining({
+          reply_markup: expect.objectContaining({
+            inline_keyboard: expect.any(Array),
+          }),
+        }),
+      );
+      const sentOptions = sendMessageSpy.mock.calls.at(-1)?.[2] as
+        | { reply_markup?: { inline_keyboard?: Array<Array<{ callback_data?: string }>> } }
+        | undefined;
+      const callbackData =
+        sentOptions?.reply_markup?.inline_keyboard?.flat().map((button) => button.callback_data) ??
+        [];
+      for (const expectedButton of expectedButtons) {
+        expect(callbackData).toContain(expectedButton);
+      }
+      expect(enqueueSystemEventSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`tradeCode=${expectedTradeCode}`),
+        expect.objectContaining({
+          contextKey: expect.stringContaining(
+            `telegram:callback:trace:7777:${messageId}:${callbackId}`,
+          ),
+        }),
+      );
+      expect(answerCallbackQuerySpy).toHaveBeenCalledWith(callbackId);
+    },
+  );
+
+  it("recovers sc:tr callback by dispatching trading home when primary handler returns no visible output", async () => {
+    onSpy.mockClear();
+    replySpy.mockClear();
+    sendMessageSpy.mockClear();
+    editMessageTextSpy.mockClear();
+    registerPluginInteractiveHandler("automation-plugin", {
+      channel: "telegram",
+      namespace: "sc",
+      handler: (async ({ callback, respond }) => {
+        if (callback.payload === "tr:approve") {
+          return { handled: true };
+        }
+        if (callback.payload === "trade") {
+          await respond.editMessage({ text: "首頁 › 交易\n\n✅ 已恢復交易面板" });
+          return { handled: true };
+        }
+        return { handled: false };
+      }) as never,
+    });
+
+    createTelegramBot({
+      token: "tok",
+      config: {
+        channels: {
+          telegram: {
+            dmPolicy: "open",
+            allowFrom: ["*"],
+          },
+        },
+      },
+    });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await expect(
+      callbackHandler({
+        callbackQuery: {
+          id: "cbq-sc-recover-trade-home",
+          data: "sc:tr:approve",
+          from: { id: 9, first_name: "Ada", username: "ada_bot" },
+          message: {
+            chat: { id: 7777, type: "private" },
+            date: 1736380800,
+            message_id: 34,
+            text: "Control panel",
+          },
+        },
+        me: { username: "openclaw_bot" },
+        getFile: async () => ({ download: async () => new Uint8Array() }),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(editMessageTextSpy).toHaveBeenCalledTimes(1);
+    expect(editMessageTextSpy).toHaveBeenCalledWith(
+      7777,
+      34,
+      "首頁 › 交易\n\n✅ 已恢復交易面板",
+      expect.any(Object),
+    );
+    expect(sendMessageSpy).not.toHaveBeenCalledWith(
+      7777,
+      "ℹ️ 已收到操作，但目前沒有可顯示內容。\n請按「返回首頁」重整控制面板後再試。",
+      expect.anything(),
+    );
+  });
+
+  it("emits trade refresh hint for tr:write when callback edit is not modified and notice is deduped", async () => {
+    onSpy.mockClear();
+    replySpy.mockClear();
+    sendMessageSpy.mockClear();
+    editMessageTextSpy.mockClear();
+    editMessageTextSpy.mockRejectedValue(
+      new Error(
+        "400: Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message",
+      ),
+    );
+    registerPluginInteractiveHandler("automation-plugin", {
+      channel: "telegram",
+      namespace: "sc",
+      handler: (async ({ callback, respond }) => {
+        if (callback.payload !== "tr:write") {
+          return { handled: false };
+        }
+        await respond.editMessage({ text: "首頁 › 交易\n\n✍️ 寫入審核票" });
+        return { handled: true };
+      }) as never,
+    });
+
+    createTelegramBot({
+      token: "tok",
+      config: {
+        channels: {
+          telegram: {
+            dmPolicy: "open",
+            allowFrom: ["*"],
+          },
+        },
+      },
+    });
+    const callbackHandler = getOnHandler("callback_query") as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+    const baseMessage = {
+      chat: { id: 9999, type: "private" as const },
+      date: 1736380800,
+      message_id: 88,
+      text: "交易控制面板",
+    };
+    const baseFrom = { id: 9, first_name: "Ada", username: "ada_bot" };
+    const invoke = (id: string) =>
+      callbackHandler({
+        callbackQuery: {
+          id,
+          data: "sc:tr:write",
+          from: baseFrom,
+          message: baseMessage,
+        },
+        me: { username: "openclaw_bot" },
+        getFile: async () => ({ download: async () => new Uint8Array() }),
+      });
+
+    await expect(invoke("cbq-sc-tr-not-modified-1")).resolves.toBeUndefined();
+    await expect(invoke("cbq-sc-tr-not-modified-2")).resolves.toBeUndefined();
+
+    expect(editMessageTextSpy).toHaveBeenCalledTimes(2);
+    expect(sendMessageSpy).toHaveBeenCalledWith(9999, "ℹ️ 畫面已是最新狀態。", undefined);
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      9999,
+      "ℹ️ 寫入畫面已是最新狀態；若仍顯示 Gateway 無回應，請先按「實單阻擋」再按「寫入票據」。",
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          inline_keyboard: expect.arrayContaining([
+            expect.arrayContaining([
+              expect.objectContaining({ text: "✍️ 寫入票據", callback_data: "sc:tr:write" }),
+              expect.objectContaining({ text: "🛡 實單阻擋", callback_data: "sc:tr:live" }),
+            ]),
+            expect.arrayContaining([
+              expect.objectContaining({ text: "← 返回交易", callback_data: "sc:trade" }),
+              expect.objectContaining({ text: "← 返回首頁", callback_data: "sc:home" }),
+            ]),
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it.each([
+    {
+      data: "sc:tr:assist",
+      callbackId: "cbq-sc-tr-assist-not-modified",
+      expectedText:
+        "ℹ️ 模擬助手畫面已是最新狀態；請按「模擬助手」重試，或按「寫入票據」查看最新狀態。",
+      expectedButtons: ["sc:tr:assist", "sc:tr:write", "sc:trade", "sc:home"],
+    },
+    {
+      data: "sc:tr:approve",
+      callbackId: "cbq-sc-tr-approve-not-modified",
+      expectedText: "ℹ️ 核准畫面已是最新狀態；請先按「寫入票據」，再按「審核紀錄」確認。",
+      expectedButtons: ["sc:tr:write", "sc:tr:audit", "sc:trade", "sc:home"],
+    },
+    {
+      data: "sc:tr:audit:all_0",
+      callbackId: "cbq-sc-tr-audit-not-modified",
+      expectedText: "ℹ️ 審核紀錄已是最新狀態；請按「審核紀錄」重試，或按「返回交易」重新載入。",
+      expectedButtons: ["sc:tr:audit", "sc:tr:paperloop", "sc:trade", "sc:home"],
+    },
+  ])(
+    "emits trade refresh hint for $data when callback edit is not modified",
+    async ({ data, callbackId, expectedText, expectedButtons }) => {
+      onSpy.mockClear();
+      replySpy.mockClear();
+      sendMessageSpy.mockClear();
+      editMessageTextSpy.mockClear();
+      editMessageTextSpy.mockRejectedValue(
+        new Error(
+          "400: Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message",
+        ),
+      );
+      registerPluginInteractiveHandler("automation-plugin", {
+        channel: "telegram",
+        namespace: "sc",
+        handler: (async ({ callback, respond }) => {
+          if (callback.payload !== data.replace("sc:", "")) {
+            return { handled: false };
+          }
+          await respond.editMessage({ text: "首頁 › 交易\n\n狀態更新" });
+          return { handled: true };
+        }) as never,
+      });
+
+      createTelegramBot({
+        token: "tok",
+        config: {
+          channels: {
+            telegram: {
+              dmPolicy: "open",
+              allowFrom: ["*"],
+            },
+          },
+        },
+      });
+      const callbackHandler = getOnHandler("callback_query") as (
+        ctx: Record<string, unknown>,
+      ) => Promise<void>;
+
+      const invoke = (id: string) =>
+        callbackHandler({
+          callbackQuery: {
+            id,
+            data,
+            from: { id: 9, first_name: "Ada", username: "ada_bot" },
+            message: {
+              chat: { id: 9999, type: "private" },
+              date: 1736380800,
+              message_id: 89,
+              text: "交易控制面板",
+            },
+          },
+          me: { username: "openclaw_bot" },
+          getFile: async () => ({ download: async () => new Uint8Array() }),
+        });
+
+      await expect(invoke(`${callbackId}-1`)).resolves.toBeUndefined();
+      await expect(invoke(`${callbackId}-2`)).resolves.toBeUndefined();
+
+      expect(sendMessageSpy).toHaveBeenCalledWith(9999, "ℹ️ 畫面已是最新狀態。", undefined);
+      expect(sendMessageSpy).toHaveBeenCalledWith(
+        9999,
+        expectedText,
+        expect.objectContaining({
+          reply_markup: expect.objectContaining({
+            inline_keyboard: expect.any(Array),
+          }),
+        }),
+      );
+      const sentOptions = sendMessageSpy.mock.calls.at(-1)?.[2] as
+        | { reply_markup?: { inline_keyboard?: Array<Array<{ callback_data?: string }>> } }
+        | undefined;
+      const callbackData =
+        sentOptions?.reply_markup?.inline_keyboard?.flat().map((button) => button.callback_data) ??
+        [];
+      for (const expectedButton of expectedButtons) {
+        expect(callbackData).toContain(expectedButton);
+      }
+      expect(answerCallbackQuerySpy).toHaveBeenCalledWith(`${callbackId}-1`);
+      expect(answerCallbackQuerySpy).toHaveBeenCalledWith(`${callbackId}-2`);
+    },
+  );
 
   it("routes Telegram #General callback payloads as topic 1 when Telegram omits topic metadata", async () => {
     onSpy.mockClear();
@@ -2237,7 +3786,7 @@ describe("createTelegramBot", () => {
       -100123456789,
       11,
       "Handled -100123456789:topic:1",
-      undefined,
+      {},
     );
   });
   it("keeps unconfigured dm topic commands on the flat dm session", async () => {
@@ -2245,7 +3794,6 @@ describe("createTelegramBot", () => {
     sendMessageSpy.mockClear();
     commandSpy.mockClear();
     replySpy.mockClear();
-    replySpy.mockResolvedValue({ text: "response" });
 
     loadConfig.mockReturnValue({
       commands: { native: true },
@@ -2277,9 +3825,10 @@ describe("createTelegramBot", () => {
       match: "",
     });
 
-    expect(replySpy).toHaveBeenCalledTimes(1);
-    const payload = replySpy.mock.calls[0][0];
-    expect(payload.CommandTargetSessionKey).toBe("agent:main:main");
+    expect(replySpy).not.toHaveBeenCalled();
+    expect(sendMessageSpy).toHaveBeenCalledTimes(1);
+    const [, , options] = sendMessageSpy.mock.calls[0] ?? [];
+    expect(options).toBeTruthy();
   });
 
   it("allows native DM commands for paired users", async () => {
@@ -2287,7 +3836,6 @@ describe("createTelegramBot", () => {
     sendMessageSpy.mockClear();
     commandSpy.mockClear();
     replySpy.mockClear();
-    replySpy.mockResolvedValue({ text: "response" });
 
     loadConfig.mockReturnValue({
       commands: { native: true },
@@ -2318,12 +3866,11 @@ describe("createTelegramBot", () => {
       match: "",
     });
 
-    expect(replySpy).toHaveBeenCalledTimes(1);
-    expect(
-      sendMessageSpy.mock.calls.some(
-        (call) => call[1] === "You are not authorized to use this command.",
-      ),
-    ).toBe(false);
+    expect(replySpy).not.toHaveBeenCalled();
+    expect(sendMessageSpy).toHaveBeenCalledTimes(1);
+    expect(sendMessageSpy.mock.calls.some((call) => call[1] === "你沒有權限使用這個指令。")).toBe(
+      false,
+    );
   });
 
   it("keeps native DM commands on the startup-resolved config when fresh reads contain SecretRefs", async () => {
@@ -2331,7 +3878,6 @@ describe("createTelegramBot", () => {
     sendMessageSpy.mockClear();
     commandSpy.mockClear();
     replySpy.mockClear();
-    replySpy.mockResolvedValue({ text: "response" });
 
     const startupConfig = {
       commands: { native: true },
@@ -2376,7 +3922,8 @@ describe("createTelegramBot", () => {
       match: "",
     });
 
-    expect(replySpy).toHaveBeenCalledTimes(1);
+    expect(replySpy).not.toHaveBeenCalled();
+    expect(sendMessageSpy).toHaveBeenCalledTimes(1);
   });
 
   it("blocks native DM commands for unpaired users", async () => {
@@ -2415,11 +3962,7 @@ describe("createTelegramBot", () => {
     });
 
     expect(replySpy).not.toHaveBeenCalled();
-    expect(sendMessageSpy).toHaveBeenCalledWith(
-      12345,
-      "You are not authorized to use this command.",
-      {},
-    );
+    expect(sendMessageSpy).toHaveBeenCalledWith(12345, "你沒有權限使用這個指令。", {});
   });
 
   it("registers message_reaction handler", () => {

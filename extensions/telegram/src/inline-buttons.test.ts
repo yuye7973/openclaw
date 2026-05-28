@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildTelegramInteractiveButtons } from "./button-types.js";
 import { describeTelegramInteractiveButtonBehavior } from "./button-types.test-helpers.js";
-import { resolveTelegramTargetChatType } from "./inline-buttons.js";
+import {
+  resolveTelegramInlineButtonsScopeFromCapabilities,
+  resolveTelegramTargetChatType,
+} from "./inline-buttons.js";
 
 describe("resolveTelegramTargetChatType", () => {
   it("returns 'direct' for positive numeric IDs", () => {
@@ -35,6 +38,18 @@ describe("resolveTelegramTargetChatType", () => {
   it("returns 'unknown' for empty strings", () => {
     expect(resolveTelegramTargetChatType("")).toBe("unknown");
     expect(resolveTelegramTargetChatType("   ")).toBe("unknown");
+  });
+});
+
+describe("resolveTelegramInlineButtonsScopeFromCapabilities", () => {
+  it("accepts direct string scope values", () => {
+    expect(resolveTelegramInlineButtonsScopeFromCapabilities("off")).toBe("off");
+    expect(resolveTelegramInlineButtonsScopeFromCapabilities("all")).toBe("all");
+    expect(resolveTelegramInlineButtonsScopeFromCapabilities(" allowlist ")).toBe("allowlist");
+  });
+
+  it("keeps default scope for unknown scalar values", () => {
+    expect(resolveTelegramInlineButtonsScopeFromCapabilities("unexpected")).toBe("allowlist");
   });
 });
 

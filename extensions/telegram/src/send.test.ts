@@ -2608,6 +2608,36 @@ describe("editMessageTelegram", () => {
     expect(botApi.editMessageText).toHaveBeenCalledTimes(1);
   });
 
+  it("treats newline-variant 'message is not modified' as success", async () => {
+    botApi.editMessageText.mockRejectedValueOnce(
+      new Error(
+        "400: Bad Request: message is\\nnot modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message",
+      ),
+    );
+
+    await expect(
+      editMessageTelegram("123", 1, "hi", {
+        token: "tok",
+        cfg: {},
+      }),
+    ).resolves.toEqual({ ok: true, messageId: "1", chatId: "123" });
+    expect(botApi.editMessageText).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats escaped-newline-only 'message is not modified' as success", async () => {
+    botApi.editMessageText.mockRejectedValueOnce(
+      new Error("400: Bad Request: message is\\nnot modified"),
+    );
+
+    await expect(
+      editMessageTelegram("123", 1, "hi", {
+        token: "tok",
+        cfg: {},
+      }),
+    ).resolves.toEqual({ ok: true, messageId: "1", chatId: "123" });
+    expect(botApi.editMessageText).toHaveBeenCalledTimes(1);
+  });
+
   it("retries editMessageTelegram on Telegram 5xx errors", async () => {
     botApi.editMessageText
       .mockRejectedValueOnce(Object.assign(new Error("502: Bad Gateway"), { error_code: 502 }))

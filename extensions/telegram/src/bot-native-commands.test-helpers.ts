@@ -202,6 +202,6 @@ export function createTelegramGroupCommandContext(params?: {
 
 export function findNotAuthorizedCalls(sendMessage: AnyAsyncMock) {
   return sendMessage.mock.calls.filter(
-    (call) => typeof call[1] === "string" && call[1].includes("not authorized"),
+    (call) => typeof call[1] === "string" && call[1].includes("沒有權限"),
   );
 }

@@ -193,6 +193,7 @@ describe("handleTelegramAction", () => {
       ok: false,
       reason: "missing_message_id",
     });
+    expect(result.details?.hint).toContain("請勿重試");
     expect(reactMessageTelegram).not.toHaveBeenCalled();
   });
 
@@ -309,6 +310,7 @@ describe("handleTelegramAction", () => {
         ok: false,
         reason: "disabled",
       });
+      expect(result.details?.hint).toContain("請勿重試");
     },
   );
 
@@ -334,6 +336,25 @@ describe("handleTelegramAction", () => {
     expect(result.details).toMatchObject({
       ok: false,
       reason: "disabled",
+    });
+    expect(result.details?.hint).toContain("請勿重試");
+  });
+
+  it("returns zh-TW non-retry hint when reaction call throws", async () => {
+    reactMessageTelegram.mockRejectedValueOnce(new Error("boom"));
+    const result = await handleTelegramAction(
+      {
+        action: "react",
+        chatId: "123",
+        messageId: "456",
+        emoji: "✅",
+      },
+      reactionConfig("minimal"),
+    );
+    expect(result.details).toMatchObject({
+      ok: false,
+      reason: "error",
+      hint: "反應操作失敗，請勿重試。",
     });
   });
 

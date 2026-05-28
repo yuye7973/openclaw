@@ -245,6 +245,15 @@ const execApprovalHoisted = vi.hoisted(() => ({
   resolveExecApprovalSpy: vi.fn(async () => undefined),
 }));
 export const resolveExecApprovalSpy = execApprovalHoisted.resolveExecApprovalSpy;
+const capitalSemiCallbackHoisted = vi.hoisted(() => ({
+  resolveCapitalSemiApprovalCallbackSpy: vi.fn(async () => ({
+    replyText: "[OpenClaw SEMI callback] 模擬回呼",
+    status: "callback_review_checklist_written",
+    blockers: [],
+  })),
+}));
+export const resolveCapitalSemiApprovalCallbackSpy =
+  capitalSemiCallbackHoisted.resolveCapitalSemiApprovalCallbackSpy;
 
 const sentMessageCacheHoisted = vi.hoisted(() => ({
   wasSentByBot: vi.fn(() => false),
@@ -383,6 +392,9 @@ export const telegramBotDepsForTest: TelegramBotDeps = {
   resolveExecApproval: resolveExecApprovalSpy as NonNullable<
     TelegramBotDeps["resolveExecApproval"]
   >,
+  resolveCapitalSemiApprovalCallback: resolveCapitalSemiApprovalCallbackSpy as NonNullable<
+    TelegramBotDeps["resolveCapitalSemiApprovalCallback"]
+  >,
 };
 
 vi.doMock("./bot.runtime.js", () => telegramBotRuntimeForTest);
@@ -480,6 +492,12 @@ beforeEach(() => {
   });
   resolveExecApprovalSpy.mockReset();
   resolveExecApprovalSpy.mockResolvedValue(undefined);
+  resolveCapitalSemiApprovalCallbackSpy.mockReset();
+  resolveCapitalSemiApprovalCallbackSpy.mockResolvedValue({
+    replyText: "[OpenClaw SEMI callback] 模擬回呼",
+    status: "callback_review_checklist_written",
+    blockers: [],
+  });
   dispatchReplyWithBufferedBlockDispatcher.mockReset();
   dispatchReplyWithBufferedBlockDispatcher.mockImplementation(
     async (params: DispatchReplyHarnessParams) =>

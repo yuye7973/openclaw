@@ -90,6 +90,43 @@ describe("telegram error policy", () => {
     ).toBe(true);
   });
 
+  it("normalizes MESSAGE_NOT_MODIFIED variants into one cooldown key", () => {
+    const scopeKey = buildTelegramErrorScopeKey({
+      accountId: "work",
+      chatId: 42,
+    });
+
+    expect(
+      shouldSuppressTelegramError({
+        scopeKey,
+        cooldownMs: 1000,
+        errorMessage:
+          "Call to 'editMessageText' failed! (400: Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message)",
+      }),
+    ).toBe(false);
+    expect(
+      shouldSuppressTelegramError({
+        scopeKey,
+        cooldownMs: 1000,
+        errorMessage: "MESSAGE_NOT_MODIFIED",
+      }),
+    ).toBe(true);
+    expect(
+      shouldSuppressTelegramError({
+        scopeKey,
+        cooldownMs: 1000,
+        errorMessage: "Bad Request: message is\\nnot modified",
+      }),
+    ).toBe(true);
+    expect(
+      shouldSuppressTelegramError({
+        scopeKey,
+        cooldownMs: 1000,
+        errorMessage: "429",
+      }),
+    ).toBe(false);
+  });
+
   it("prunes expired cooldowns within a single scope", () => {
     const scopeKey = buildTelegramErrorScopeKey({
       accountId: "work",

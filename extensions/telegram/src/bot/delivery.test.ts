@@ -142,6 +142,18 @@ function createNormalizedQuoteTextInvalidError(operation = "sendMessage") {
   );
 }
 
+function createMessageToBeRepliedNotFoundError(operation = "sendMessage") {
+  return new Error(
+    `GrammyError: Call to '${operation}' failed! (400: Bad Request: message to be replied not found)`,
+  );
+}
+
+function createReplyMessageNotFoundError(operation = "sendMessage") {
+  return new Error(
+    `GrammyError: Call to '${operation}' failed! (400: Bad Request: reply message not found)`,
+  );
+}
+
 function createWrappedPreConnectHttpError(operation = "sendMessage") {
   const root = Object.assign(new Error("getaddrinfo ENOTFOUND api.telegram.org"), {
     code: "ENOTFOUND",
@@ -1008,6 +1020,8 @@ describe("deliverReplies", () => {
       createQuoteNotFoundError,
       createQuoteTextInvalidError,
       createNormalizedQuoteTextInvalidError,
+      createMessageToBeRepliedNotFoundError,
+      createReplyMessageNotFoundError,
     ]) {
       const runtime = createRuntime();
       const sendMessage = vi

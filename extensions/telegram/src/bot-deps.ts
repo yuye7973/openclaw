@@ -33,6 +33,15 @@ export type TelegramBotDeps = {
   syncTelegramMenuCommands?: typeof syncTelegramMenuCommands;
   wasSentByBot: typeof wasSentByBot;
   resolveExecApproval?: typeof resolveTelegramExecApproval;
+  resolveCapitalSemiApprovalCallback?: (params: {
+    repoRoot: string;
+    action: "approve" | "reject" | "refresh";
+    callbackData: string;
+  }) => Promise<{
+    replyText: string;
+    status?: string;
+    blockers?: string[];
+  }>;
   createTelegramDraftStream?: typeof createTelegramDraftStream;
   deliverReplies?: typeof deliverReplies;
   deliverInboundReplyWithMessageSendContext?: typeof deliverInboundReplyWithMessageSendContext;

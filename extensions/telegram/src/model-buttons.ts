@@ -199,7 +199,7 @@ export function buildModelsKeyboard(params: ModelsKeyboardParams): ButtonRow[] {
   const pageSize = params.pageSize ?? MODELS_PAGE_SIZE;
 
   if (models.length === 0) {
-    return [[{ text: "<< Back", callback_data: CALLBACK_PREFIX.back }]];
+    return [[{ text: "↩ 返回供應商", callback_data: CALLBACK_PREFIX.back }]];
   }
 
   const rows: ButtonRow[] = [];
@@ -235,7 +235,7 @@ export function buildModelsKeyboard(params: ModelsKeyboardParams): ButtonRow[] {
 
     if (currentPage > 1) {
       paginationRow.push({
-        text: "◀ Prev",
+        text: "◀ 上一頁",
         callback_data: `${CALLBACK_PREFIX.list}${provider}_${currentPage - 1}`,
       });
     }
@@ -247,7 +247,7 @@ export function buildModelsKeyboard(params: ModelsKeyboardParams): ButtonRow[] {
 
     if (currentPage < totalPages) {
       paginationRow.push({
-        text: "Next ▶",
+        text: "下一頁 ▶",
         callback_data: `${CALLBACK_PREFIX.list}${provider}_${currentPage + 1}`,
       });
     }
@@ -256,7 +256,7 @@ export function buildModelsKeyboard(params: ModelsKeyboardParams): ButtonRow[] {
   }
 
   // Back button
-  rows.push([{ text: "<< Back", callback_data: CALLBACK_PREFIX.back }]);
+  rows.push([{ text: "↩ 返回供應商", callback_data: CALLBACK_PREFIX.back }]);
 
   return rows;
 }
@@ -265,7 +265,7 @@ export function buildModelsKeyboard(params: ModelsKeyboardParams): ButtonRow[] {
  * Build "Browse providers" button for /model summary.
  */
 export function buildBrowseProvidersButton(): ButtonRow[] {
-  return [[{ text: "Browse providers", callback_data: CALLBACK_PREFIX.providers }]];
+  return [[{ text: "瀏覽供應商", callback_data: CALLBACK_PREFIX.providers }]];
 }
 
 /**

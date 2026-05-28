@@ -332,16 +332,12 @@ describe("createTelegramBot channel_post media", () => {
         getFile: async () => ({ file_path: "photos/p1.jpg" }),
       });
 
-      expect(sendMessageSpy).toHaveBeenCalledWith(
-        1234,
-        "⚠️ Failed to download media. Please try again.",
-        {
-          reply_parameters: {
-            message_id: 411,
-            allow_sending_without_reply: true,
-          },
+      expect(sendMessageSpy).toHaveBeenCalledWith(1234, "⚠️ 下載媒體失敗，請稍後再試。", {
+        reply_parameters: {
+          message_id: 411,
+          allow_sending_without_reply: true,
         },
-      );
+      });
       expect(replySpy).not.toHaveBeenCalled();
     } finally {
       fetchSpy.mockRestore();

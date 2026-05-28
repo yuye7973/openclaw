@@ -19,6 +19,8 @@ import { pluginCommandMocks, resetPluginCommandMocks } from "./test-support/plug
 let registerTelegramNativeCommands: typeof import("./bot-native-commands.js").registerTelegramNativeCommands;
 let parseTelegramNativeCommandCallbackData: typeof import("./bot-native-commands.js").parseTelegramNativeCommandCallbackData;
 let resolveTelegramNativeCommandDisableBlockStreaming: typeof import("./bot-native-commands.js").resolveTelegramNativeCommandDisableBlockStreaming;
+let buildTelegramMainMenuButtons: typeof import("./bot-native-commands.js").buildTelegramMainMenuButtons;
+let buildTelegramReturnMainMenuButtons: typeof import("./bot-native-commands.js").buildTelegramReturnMainMenuButtons;
 
 type CommandBotHarness = ReturnType<typeof createCommandBot>;
 type CommandHandler = (ctx: unknown) => Promise<void>;
@@ -98,6 +100,8 @@ describe("registerTelegramNativeCommands", () => {
       registerTelegramNativeCommands,
       parseTelegramNativeCommandCallbackData,
       resolveTelegramNativeCommandDisableBlockStreaming,
+      buildTelegramMainMenuButtons,
+      buildTelegramReturnMainMenuButtons,
     } = await import("./bot-native-commands.js"));
   });
 
@@ -175,6 +179,25 @@ describe("registerTelegramNativeCommands", () => {
     expect(runtimeLog).toHaveBeenCalledWith(
       "Telegram menu text exceeded the conservative 5700-character payload budget; shortening descriptions to keep 92 commands visible.",
     );
+  });
+
+  it("registers capital status commands into Telegram menu and handlers", async () => {
+    const { bot, commandHandlers, setMyCommands } = createCommandBot();
+    registerTelegramNativeCommands({
+      ...createNativeCommandTestParams({}, { bot }),
+    });
+
+    const registeredCommands = await waitForRegisteredCommands(setMyCommands);
+    expect(registeredCommands).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ command: "quote" }),
+        expect.objectContaining({ command: "capital_status" }),
+        expect.objectContaining({ command: "menu" }),
+      ]),
+    );
+    expect(commandHandlers.has("quote")).toBe(true);
+    expect(commandHandlers.has("capital_status")).toBe(true);
+    expect(commandHandlers.has("menu")).toBe(true);
   });
 
   it("normalizes hyphenated native command names for Telegram registration", async () => {
@@ -265,6 +288,25 @@ describe("registerTelegramNativeCommands", () => {
     expect(parseTelegramNativeCommandCallbackData("tgcmd:fast status")).toBeNull();
   });
 
+  it("builds Chinese main-menu callback buttons from native command helpers", () => {
+    const mainMenuButtons = buildTelegramMainMenuButtons();
+    const mainMenuCallbackData = mainMenuButtons
+      .flat()
+      .map((button) => button.callback_data)
+      .filter((value): value is string => typeof value === "string");
+    expect(mainMenuCallbackData).toEqual([
+      "tgcmd:/status",
+      "tgcmd:/quote status",
+      "tgcmd:/capital_status",
+      "tgcmd:/okx_status",
+      "tgcmd:/quote simlive tx00 buy 1",
+      "tgcmd:/quote live cn0000 buy 1",
+    ]);
+
+    const returnButtons = buildTelegramReturnMainMenuButtons();
+    expect(returnButtons).toEqual([[{ text: "↩ 返回主選單", callback_data: "tgcmd:/start" }]]);
+  });
+
   it("passes agent-scoped media roots for plugin command replies with media", async () => {
     const cfg: OpenClawConfig = {
       agents: {
@@ -291,7 +333,7 @@ describe("registerTelegramNativeCommands", () => {
         ]),
       }),
     );
-    expect(sendMessage).not.toHaveBeenCalledWith(123, "Command not found.");
+    expect(sendMessage).not.toHaveBeenCalledWith(123, "找不到這個指令。");
   });
 
   it("replies to unmatched plugin commands in the originating forum topic", async () => {
@@ -316,7 +358,7 @@ describe("registerTelegramNativeCommands", () => {
 
     expect(sendMessage).toHaveBeenCalledWith(
       -1001234567890,
-      "Command not found.",
+      "找不到這個指令。",
       expect.objectContaining({ message_thread_id: 77 }),
     );
   });

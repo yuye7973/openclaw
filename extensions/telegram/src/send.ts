@@ -177,7 +177,7 @@ function splitTelegramPlainTextFallback(text: string, chunkCount: number, limit:
 const PARSE_ERR_RE = /can't parse entities|parse entities|find end of the entity/i;
 const THREAD_NOT_FOUND_RE = /400:\s*Bad Request:\s*message thread not found/i;
 const MESSAGE_NOT_MODIFIED_RE =
-  /400:\s*Bad Request:\s*message is not modified|MESSAGE_NOT_MODIFIED/i;
+  /400:\s*Bad Request:\s*message\s*is\s*not\s*modified|MESSAGE_NOT_MODIFIED|specified\s+new\s+message\s+content\s+and\s+reply\s+markup\s+are\s+exactly\s+the\s+same/i;
 const MESSAGE_DELETE_NOOP_RE =
   /message to delete not found|message can't be deleted|MESSAGE_ID_INVALID|MESSAGE_DELETE_FORBIDDEN/i;
 const CHAT_NOT_FOUND_RE = /400: Bad Request: chat not found/i;
@@ -372,7 +372,11 @@ function isTelegramThreadNotFoundError(err: unknown): boolean {
 }
 
 function isTelegramMessageNotModifiedError(err: unknown): boolean {
-  return MESSAGE_NOT_MODIFIED_RE.test(formatErrorMessage(err));
+  const normalized = formatErrorMessage(err)
+    .replace(/\\r\\n/gi, "\n")
+    .replace(/\\n/gi, "\n")
+    .replace(/\\r/gi, "\n");
+  return MESSAGE_NOT_MODIFIED_RE.test(normalized);
 }
 
 function isTelegramMessageDeleteNoopError(err: unknown): boolean {

@@ -1,3 +1,6 @@
+import { execFile } from "node:child_process";
+import path from "node:path";
+import { promisify } from "node:util";
 import type { Message, ReactionTypeEmoji } from "@grammyjs/types";
 import { parseExecApprovalCommandText } from "openclaw/plugin-sdk/approval-reply-runtime";
 import { resolveChannelConfigWrites } from "openclaw/plugin-sdk/channel-config-helpers";
@@ -34,6 +37,7 @@ import {
   resolveSessionStoreEntry,
   updateSessionStore,
 } from "openclaw/plugin-sdk/session-store-runtime";
+import { formatErrorMessage } from "openclaw/plugin-sdk/ssrf-runtime";
 import { resolveTelegramAccount, resolveTelegramMediaRuntimeOptions } from "./accounts.js";
 import { withTelegramApiErrorLogging } from "./api-logging.js";
 import {
@@ -57,9 +61,13 @@ import {
   isRecoverableMediaGroupError,
   resolveInboundMediaFileId,
 } from "./bot-handlers.media.js";
+import { canBypassModelForQuote } from "./bot-handlers.quote-bypass.js";
 import type { TelegramMediaRef } from "./bot-message-context.js";
 import {
+  buildTelegramMainMenuButtons,
+  buildTelegramReturnMainMenuButtons,
   parseTelegramNativeCommandCallbackData,
+  TELEGRAM_MAIN_MENU_TEXT,
   RegisterTelegramHandlerParams,
 } from "./bot-native-commands.js";
 import {
@@ -80,6 +88,7 @@ import {
   withResolvedTelegramForumFlag,
 } from "./bot/helpers.js";
 import type { TelegramContext, TelegramGetChat } from "./bot/types.js";
+import { buildCapitalQuoteNaturalLanguageReplyText } from "./capital-quote-natural-language.js";
 import { buildCommandsPaginationKeyboard, buildTelegramModelsMenuButtons } from "./command-ui.js";
 import {
   resolveTelegramConversationBaseSessionKey,
@@ -109,6 +118,118 @@ import {
   type ProviderInfo,
 } from "./model-buttons.js";
 import { buildInlineKeyboard } from "./send.js";
+
+const execFileAsync = promisify(execFile);
+const CALLBACK_UP_TO_DATE_NOTICE_DEDUP_MS = 5_000;
+const callbackUpToDateNoticeByKey = new Map<string, number>();
+const TELEGRAM_CONTROL_CALLBACK_TRACE_TARGETS = new Set([
+  "sc:home",
+  "sc:stat",
+  "sc:trade",
+  "sc:tr:write",
+  "sc:tr:approve",
+  "sc:tr:audit",
+]);
+type CapitalSemiCallbackAction = "approve" | "reject" | "refresh";
+type CapitalSemiCallbackData = {
+  action: CapitalSemiCallbackAction;
+  callbackData: string;
+};
+type CapitalSemiCallbackResult = {
+  replyText: string;
+  status?: string;
+  blockers?: string[];
+};
+
+function buildTelegramMainMenuReplyMarkup() {
+  return buildInlineKeyboard(buildTelegramMainMenuButtons());
+}
+
+function buildTelegramReturnMainMenuReplyMarkup() {
+  return buildInlineKeyboard(buildTelegramReturnMainMenuButtons());
+}
+
+function shouldEmitUpToDateNotice(key: string, now = Date.now()): boolean {
+  const lastSeenAt = callbackUpToDateNoticeByKey.get(key);
+  if (typeof lastSeenAt === "number" && now - lastSeenAt < CALLBACK_UP_TO_DATE_NOTICE_DEDUP_MS) {
+    return false;
+  }
+  callbackUpToDateNoticeByKey.set(key, now);
+  const cutoff = now - CALLBACK_UP_TO_DATE_NOTICE_DEDUP_MS;
+  for (const [seenKey, seenAt] of callbackUpToDateNoticeByKey.entries()) {
+    if (seenAt < cutoff) {
+      callbackUpToDateNoticeByKey.delete(seenKey);
+    }
+  }
+  return true;
+}
+
+function parseCapitalSemiCallbackData(data: string): CapitalSemiCallbackData | null {
+  const match = data.trim().match(/^capital_semi_(approve|reject|refresh)_[a-f0-9]{16}$/iu);
+  if (!match) {
+    return null;
+  }
+  return {
+    action: match[1].toLowerCase() as CapitalSemiCallbackAction,
+    callbackData: data.trim(),
+  };
+}
+
+async function resolveCapitalSemiApprovalCallbackFromScript(params: {
+  repoRoot: string;
+  action: CapitalSemiCallbackAction;
+  callbackData: string;
+}): Promise<CapitalSemiCallbackResult> {
+  const scriptPath = path.resolve(
+    params.repoRoot,
+    "scripts",
+    "openclaw-capital-telegram-semi-approval-callback.mjs",
+  );
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    [
+      scriptPath,
+      "--action",
+      params.action,
+      "--callback-data",
+      params.callbackData,
+      "--write-review-checklist",
+      "--write-state",
+      "--json",
+    ],
+    {
+      cwd: params.repoRoot,
+      env: process.env,
+      maxBuffer: 1024 * 1024,
+    },
+  );
+  const rawOutput = stdout.trim();
+  if (!rawOutput) {
+    throw new Error("capital semi callback script returned empty output");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawOutput);
+  } catch {
+    throw new Error(
+      `capital semi callback script returned invalid JSON: ${rawOutput.slice(0, 240)}`,
+    );
+  }
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("capital semi callback script returned invalid payload shape");
+  }
+  const payload = parsed as { replyText?: unknown; status?: unknown; blockers?: unknown };
+  const replyText = typeof payload.replyText === "string" ? payload.replyText.trim() : "";
+  const status = typeof payload.status === "string" ? payload.status : undefined;
+  const blockers = Array.isArray(payload.blockers)
+    ? payload.blockers.filter((item): item is string => typeof item === "string")
+    : undefined;
+  return {
+    replyText: replyText || "[OpenClaw SEMI callback] 已處理",
+    status,
+    blockers,
+  };
+}
 
 export const registerTelegramHandlers = ({
   cfg,
@@ -296,7 +417,7 @@ export const registerTelegramHandlers = ({
         void bot.api
           .sendMessage(
             chatId,
-            "Something went wrong while processing your message. Please try again.",
+            "處理你的訊息時發生錯誤，請稍後再試。",
             threadId != null ? { message_thread_id: threadId } : undefined,
           )
           .catch((sendErr) => {
@@ -700,7 +821,7 @@ export const registerTelegramHandlers = ({
   }
 
   const TELEGRAM_PERMANENT_CALLBACK_EDIT_ERROR_RE =
-    /400:\s*Bad Request:\s*message to edit not found|400:\s*Bad Request:\s*there is no text in the message to edit|MESSAGE_ID_INVALID|400:\s*Bad Request:\s*message can't be edited/i;
+    /400:\s*Bad Request:\s*message to edit not found|400:\s*Bad Request:\s*there is no text in the message to edit|MESSAGE_ID_INVALID|400:\s*Bad Request:\s*message can't be edited|400:\s*Bad Request:\s*message\s*is\s*not\s*modified|MESSAGE_NOT_MODIFIED|specified\s+new\s+message\s+content\s+and\s+reply\s+markup\s+are\s+exactly\s+the\s+same/i;
 
   const isPermanentTelegramCallbackEditError = (err: unknown): boolean =>
     TELEGRAM_PERMANENT_CALLBACK_EDIT_ERROR_RE.test(String(err));
@@ -1034,6 +1155,30 @@ export const registerTelegramHandlers = ({
     // We buffer “near-limit” messages and append immediately-following parts.
     const text = typeof msg.text === "string" ? msg.text : undefined;
     const isCommandLike = (text ?? "").trim().startsWith("/");
+    if (text && canBypassModelForQuote(text, msg, ctx.me?.username)) {
+      try {
+        const quoteReplyText = await buildCapitalQuoteNaturalLanguageReplyText({
+          text,
+          repoRoot: process.env.OPENCLAW_REPO_ROOT || process.cwd(),
+        });
+        if (quoteReplyText) {
+          await withTelegramApiErrorLogging({
+            operation: "sendMessage",
+            runtime,
+            fn: () =>
+              bot.api.sendMessage(chatId, quoteReplyText, {
+                reply_parameters: {
+                  message_id: msg.message_id,
+                  allow_sending_without_reply: true,
+                },
+              }),
+          }).catch(() => {});
+          return;
+        }
+      } catch (err) {
+        logVerbose(`telegram: quote bypass resolver failed: ${String(err)}`);
+      }
+    }
     if (text && !isCommandLike) {
       const nowMs = Date.now();
       const senderId = msg.from?.id != null ? String(msg.from.id) : "unknown";
@@ -1159,7 +1304,7 @@ export const registerTelegramHandlers = ({
         operation: "sendMessage",
         runtime,
         fn: () =>
-          bot.api.sendMessage(chatId, "⚠️ Failed to download media. Please try again.", {
+          bot.api.sendMessage(chatId, "⚠️ 下載媒體失敗，請稍後再試。", {
             reply_parameters: {
               message_id: msg.message_id,
               allow_sending_without_reply: true,
@@ -1235,44 +1380,72 @@ export const registerTelegramHandlers = ({
       if (!data || !callbackMessage) {
         return;
       }
+      const isMessageNotModifiedError = (error: unknown): boolean => {
+        const errorText = formatErrorMessage(error)
+          .replace(/\\r\\n/gi, "\n")
+          .replace(/\\n/gi, "\n")
+          .replace(/\\r/gi, "\n")
+          .toLowerCase();
+        return (
+          errorText.includes("message is not modified") ||
+          errorText.includes("message_not_modified") ||
+          errorText.includes(
+            "specified new message content and reply markup are exactly the same as a current content",
+          )
+        );
+      };
       const editCallbackMessage = async (
         text: string,
         params?: Parameters<typeof bot.api.editMessageText>[3],
       ) => {
-        const editTextFn = (ctx as { editMessageText?: unknown }).editMessageText;
-        if (typeof editTextFn === "function") {
-          return await ctx.editMessageText(text, params);
+        try {
+          const editTextFn = (ctx as { editMessageText?: unknown }).editMessageText;
+          if (typeof editTextFn === "function") {
+            return await ctx.editMessageText(text, params);
+          }
+          return await bot.api.editMessageText(
+            callbackMessage.chat.id,
+            callbackMessage.message_id,
+            text,
+            params,
+          );
+        } catch (editErr) {
+          if (isMessageNotModifiedError(editErr)) {
+            return undefined;
+          }
+          throw editErr;
         }
-        return await bot.api.editMessageText(
-          callbackMessage.chat.id,
-          callbackMessage.message_id,
-          text,
-          params,
-        );
       };
       const clearCallbackButtons = async () => {
         const emptyKeyboard = { inline_keyboard: [] };
         const replyMarkup = { reply_markup: emptyKeyboard };
         const editReplyMarkupFn = (ctx as { editMessageReplyMarkup?: unknown })
           .editMessageReplyMarkup;
-        if (typeof editReplyMarkupFn === "function") {
-          return await ctx.editMessageReplyMarkup(replyMarkup);
+        try {
+          if (typeof editReplyMarkupFn === "function") {
+            return await ctx.editMessageReplyMarkup(replyMarkup);
+          }
+          const apiEditReplyMarkupFn = (bot.api as { editMessageReplyMarkup?: unknown })
+            .editMessageReplyMarkup;
+          if (typeof apiEditReplyMarkupFn === "function") {
+            return await bot.api.editMessageReplyMarkup(
+              callbackMessage.chat.id,
+              callbackMessage.message_id,
+              replyMarkup,
+            );
+          }
+          // Fallback path for older clients that do not expose editMessageReplyMarkup.
+          const messageText = callbackMessage.text ?? callbackMessage.caption;
+          if (typeof messageText !== "string" || messageText.trim().length === 0) {
+            return undefined;
+          }
+          return await editCallbackMessage(messageText, replyMarkup);
+        } catch (editErr) {
+          if (isMessageNotModifiedError(editErr)) {
+            return undefined;
+          }
+          throw editErr;
         }
-        const apiEditReplyMarkupFn = (bot.api as { editMessageReplyMarkup?: unknown })
-          .editMessageReplyMarkup;
-        if (typeof apiEditReplyMarkupFn === "function") {
-          return await bot.api.editMessageReplyMarkup(
-            callbackMessage.chat.id,
-            callbackMessage.message_id,
-            replyMarkup,
-          );
-        }
-        // Fallback path for older clients that do not expose editMessageReplyMarkup.
-        const messageText = callbackMessage.text ?? callbackMessage.caption;
-        if (typeof messageText !== "string" || messageText.trim().length === 0) {
-          return undefined;
-        }
-        return await editCallbackMessage(messageText, replyMarkup);
       };
       const editCallbackButtons = async (
         buttons: Array<
@@ -1283,14 +1456,21 @@ export const registerTelegramHandlers = ({
         const replyMarkup = { reply_markup: keyboard };
         const editReplyMarkupFn = (ctx as { editMessageReplyMarkup?: unknown })
           .editMessageReplyMarkup;
-        if (typeof editReplyMarkupFn === "function") {
-          return await ctx.editMessageReplyMarkup(replyMarkup);
+        try {
+          if (typeof editReplyMarkupFn === "function") {
+            return await ctx.editMessageReplyMarkup(replyMarkup);
+          }
+          return await bot.api.editMessageReplyMarkup(
+            callbackMessage.chat.id,
+            callbackMessage.message_id,
+            replyMarkup,
+          );
+        } catch (editErr) {
+          if (isMessageNotModifiedError(editErr)) {
+            return undefined;
+          }
+          throw editErr;
         }
-        return await bot.api.editMessageReplyMarkup(
-          callbackMessage.chat.id,
-          callbackMessage.message_id,
-          replyMarkup,
-        );
       };
       const deleteCallbackMessage = async () => {
         const deleteFn = (ctx as { deleteMessage?: unknown }).deleteMessage;
@@ -1308,6 +1488,18 @@ export const registerTelegramHandlers = ({
           return await ctx.reply(text, params);
         }
         return await bot.api.sendMessage(callbackMessage.chat.id, text, params);
+      };
+      const replyCallbackUpToDateNotice = async (key: string): Promise<boolean> => {
+        if (!shouldEmitUpToDateNotice(key)) {
+          return false;
+        }
+        try {
+          await replyToCallbackChat("ℹ️ 畫面已是最新狀態。");
+          return true;
+        } catch {
+          // Ignore follow-up notice failures to keep callback flow non-blocking.
+          return false;
+        }
       };
 
       const chatId = callbackMessage.chat.id;
@@ -1376,12 +1568,74 @@ export const registerTelegramHandlers = ({
         context: eventAuthContext,
       });
       if (!senderAuthorization.allowed) {
+        if (data.startsWith("commands_page_") || data.startsWith("cmd:")) {
+          await replyToCallbackChat("你沒有權限使用這個指令。", {
+            reply_markup: buildTelegramReturnMainMenuReplyMarkup(),
+          });
+        }
         return;
       }
 
       const callbackThreadId = resolvedThreadId ?? dmThreadId;
       const callbackConversationId =
         callbackThreadId != null ? `${chatId}:topic:${callbackThreadId}` : String(chatId);
+      const shouldTraceControlCallback =
+        TELEGRAM_CONTROL_CALLBACK_TRACE_TARGETS.has(data) || data.startsWith("sc:tr:audit:");
+      const resolveTradeTraceCode = (emitPath: string): string | null => {
+        const isTradeWrite = data === "sc:tr:write";
+        const isTradeApprove = data === "sc:tr:approve";
+        const isTradeAudit = data === "sc:tr:audit" || data.startsWith("sc:tr:audit:");
+        if (!isTradeWrite && !isTradeApprove && !isTradeAudit) {
+          return null;
+        }
+        const action = isTradeWrite ? "write" : isTradeApprove ? "approve" : "audit";
+        if (emitPath === "fallback_no_visible_output") {
+          return isTradeWrite
+            ? "gateway_not_ready"
+            : isTradeApprove
+              ? "manual_review_required"
+              : "audit_snapshot_missing";
+        }
+        if (
+          emitPath === "edit_message_not_modified_trade_hint" ||
+          emitPath === "duplicate_trade_hint"
+        ) {
+          return `trade_${action}_refresh_hint`;
+        }
+        if (emitPath.startsWith("fallback_recovered:")) {
+          return "recovered_trade_panel";
+        }
+        if (emitPath === "edit_message") {
+          return `trade_${action}_panel_updated`;
+        }
+        if (emitPath === "plugin_not_matched") {
+          return "automation_plugin_missing";
+        }
+        return `trade_${action}_path_other`;
+      };
+      const emitControlCallbackTrace = (params: {
+        matched: boolean;
+        handled: boolean;
+        duplicate: boolean;
+        emitPath: string;
+      }) => {
+        if (!shouldTraceControlCallback) {
+          return;
+        }
+        const tradeCode = resolveTradeTraceCode(params.emitPath);
+        const traceText =
+          `[telegram callback trace] data=${data} matched=${params.matched ? 1 : 0} ` +
+          `handled=${params.handled ? 1 : 0} duplicate=${params.duplicate ? 1 : 0} ` +
+          `emit=${params.emitPath}` +
+          (tradeCode ? ` tradeCode=${tradeCode}` : "");
+        telegramDeps.enqueueSystemEvent(traceText, {
+          sessionKey: callbackConversationId,
+          contextKey: `telegram:callback:trace:${chatId}:${callbackMessage.message_id}:${callback.id}`,
+        });
+        logVerbose(traceText);
+      };
+      let pluginResponseEmitted = false;
+      let pluginResponsePath = "none";
       const pluginBindingApproval = parsePluginBindingApprovalCustomId(data);
       if (pluginBindingApproval) {
         let resolved: Awaited<ReturnType<typeof resolvePluginConversationBindingApproval>>;
@@ -1398,6 +1652,158 @@ export const registerTelegramHandlers = ({
         await replyToCallbackChat(buildPluginBindingResolvedText(resolved));
         return;
       }
+      type TelegramPluginResponder = Parameters<
+        typeof dispatchTelegramPluginInteractiveHandler
+      >[0]["respond"];
+      const pluginResponder: TelegramPluginResponder = {
+        reply: async ({ text, buttons, textMode }) => {
+          pluginResponseEmitted = true;
+          pluginResponsePath = "reply";
+          const parseMode = textMode === "html" ? ("HTML" as const) : undefined;
+          await replyToCallbackChat(text, {
+            ...(buttons ? { reply_markup: buildInlineKeyboard(buttons) } : {}),
+            ...(parseMode ? { parse_mode: parseMode } : {}),
+          });
+        },
+        editMessage: async ({ text, buttons, textMode }) => {
+          pluginResponseEmitted = true;
+          pluginResponsePath = "edit_message";
+          const parseMode = textMode === "html" ? ("HTML" as const) : undefined;
+          const edited = await editCallbackMessage(text, {
+            ...(buttons ? { reply_markup: buildInlineKeyboard(buttons) } : {}),
+            ...(parseMode ? { parse_mode: parseMode } : {}),
+          });
+          if (edited === undefined) {
+            const upToDateNoticeKey = `${callbackMessage.chat.id}:${callbackMessage.message_id}:${data}`;
+            const noticeEmitted = await replyCallbackUpToDateNotice(upToDateNoticeKey);
+            pluginResponsePath = noticeEmitted
+              ? "edit_message_not_modified_notice"
+              : "edit_message_not_modified_suppressed";
+          }
+        },
+        editButtons: async ({ buttons }) => {
+          pluginResponseEmitted = true;
+          pluginResponsePath = "edit_buttons";
+          await editCallbackButtons(buttons);
+        },
+        clearButtons: async () => {
+          pluginResponseEmitted = true;
+          pluginResponsePath = "clear_buttons";
+          await clearCallbackButtons();
+        },
+        deleteMessage: async () => {
+          pluginResponseEmitted = true;
+          pluginResponsePath = "delete_message";
+          await deleteCallbackMessage();
+        },
+      };
+      const buildControlFallbackReplyMarkup = () => {
+        if (data === "sc:tr:approve") {
+          return (
+            buildInlineKeyboard([
+              [
+                { text: "✍️ 寫入票據", callback_data: "sc:tr:write" },
+                { text: "🧾 審核紀錄", callback_data: "sc:tr:audit" },
+              ],
+              [
+                { text: "← 返回交易", callback_data: "sc:trade" },
+                { text: "← 返回首頁", callback_data: "sc:home" },
+              ],
+            ]) ?? buildTelegramReturnMainMenuReplyMarkup()
+          );
+        }
+        if (data.startsWith("sc:tr:audit")) {
+          return (
+            buildInlineKeyboard([
+              [
+                { text: "🧾 審核紀錄", callback_data: "sc:tr:audit" },
+                { text: "✅ 一鍵模擬閉環", callback_data: "sc:tr:paperloop" },
+              ],
+              [
+                { text: "← 返回交易", callback_data: "sc:trade" },
+                { text: "← 返回首頁", callback_data: "sc:home" },
+              ],
+            ]) ?? buildTelegramReturnMainMenuReplyMarkup()
+          );
+        }
+        if (data === "sc:tr:write") {
+          return (
+            buildInlineKeyboard([
+              [
+                { text: "✍️ 寫入票據", callback_data: "sc:tr:write" },
+                { text: "🛡 實單阻擋", callback_data: "sc:tr:live" },
+              ],
+              [
+                { text: "← 返回交易", callback_data: "sc:trade" },
+                { text: "← 返回首頁", callback_data: "sc:home" },
+              ],
+            ]) ?? buildTelegramReturnMainMenuReplyMarkup()
+          );
+        }
+        if (data.startsWith("sc:tr:")) {
+          return (
+            buildInlineKeyboard([
+              [
+                { text: "🧠 模擬助手", callback_data: "sc:tr:assist" },
+                { text: "✍️ 寫入票據", callback_data: "sc:tr:write" },
+              ],
+              [
+                { text: "← 返回交易", callback_data: "sc:trade" },
+                { text: "← 返回首頁", callback_data: "sc:home" },
+              ],
+            ]) ?? buildTelegramReturnMainMenuReplyMarkup()
+          );
+        }
+        return buildTelegramReturnMainMenuReplyMarkup();
+      };
+      const buildNoVisibleOutputFallbackText = () => {
+        if (data === "sc:tr:assist") {
+          return (
+            "ℹ️ 已收到「模擬助手」操作，但目前沒有可顯示內容。\n" +
+            "請按「模擬助手」重試，或按「寫入票據」查看最新狀態。"
+          );
+        }
+        if (data === "sc:tr:approve") {
+          return (
+            "ℹ️ 已收到「核准模擬執行」操作，但目前沒有可顯示內容。\n" +
+            "請先按「寫入票據」，再按「審核紀錄」確認最新狀態。"
+          );
+        }
+        if (data.startsWith("sc:tr:audit")) {
+          return (
+            "ℹ️ 已收到「審核紀錄」操作，但目前沒有可顯示內容。\n" +
+            "請按「審核紀錄」重試，或按「返回交易」重新載入。"
+          );
+        }
+        if (data === "sc:tr:write") {
+          return (
+            "ℹ️ 已收到「寫入審核票」操作，但目前沒有可顯示內容。\n" +
+            "請先按「實單阻擋」檢查 Gateway，再按「寫入票據」重試。"
+          );
+        }
+        if (data.startsWith("sc:tr:")) {
+          return (
+            "ℹ️ 已收到交易操作，但目前沒有可顯示內容。\n" +
+            "請按「模擬助手」或「寫入票據」查看最新狀態。"
+          );
+        }
+        return "ℹ️ 已收到操作，但目前沒有可顯示內容。\n請按「返回首頁」重整控制面板後再試。";
+      };
+      const buildTradeNotModifiedHintText = () => {
+        if (data === "sc:tr:assist") {
+          return "ℹ️ 模擬助手畫面已是最新狀態；請按「模擬助手」重試，或按「寫入票據」查看最新狀態。";
+        }
+        if (data === "sc:tr:write") {
+          return "ℹ️ 寫入畫面已是最新狀態；若仍顯示 Gateway 無回應，請先按「實單阻擋」再按「寫入票據」。";
+        }
+        if (data === "sc:tr:approve") {
+          return "ℹ️ 核准畫面已是最新狀態；請先按「寫入票據」，再按「審核紀錄」確認。";
+        }
+        if (data.startsWith("sc:tr:audit")) {
+          return "ℹ️ 審核紀錄已是最新狀態；請按「審核紀錄」重試，或按「返回交易」重新載入。";
+        }
+        return "ℹ️ 畫面已是最新狀態；若看不到更新，請按「返回交易」重新載入。";
+      };
       const pluginCallback = await dispatchTelegramPluginInteractiveHandler({
         data,
         callbackId: callback.id,
@@ -1420,33 +1826,103 @@ export const registerTelegramHandlers = ({
             messageText: callbackMessage.text ?? callbackMessage.caption,
           },
         },
-        respond: {
-          reply: async ({ text, buttons, textMode }) => {
-            const parseMode = textMode === "html" ? ("HTML" as const) : undefined;
-            await replyToCallbackChat(text, {
-              ...(buttons ? { reply_markup: buildInlineKeyboard(buttons) } : {}),
-              ...(parseMode ? { parse_mode: parseMode } : {}),
-            });
-          },
-          editMessage: async ({ text, buttons, textMode }) => {
-            const parseMode = textMode === "html" ? ("HTML" as const) : undefined;
-            await editCallbackMessage(text, {
-              ...(buttons ? { reply_markup: buildInlineKeyboard(buttons) } : {}),
-              ...(parseMode ? { parse_mode: parseMode } : {}),
-            });
-          },
-          editButtons: async ({ buttons }) => {
-            await editCallbackButtons(buttons);
-          },
-          clearButtons: async () => {
-            await clearCallbackButtons();
-          },
-          deleteMessage: async () => {
-            await deleteCallbackMessage();
-          },
-        },
+        respond: pluginResponder,
       });
       if (pluginCallback.handled) {
+        if (!pluginResponseEmitted && !pluginCallback.duplicate && data.startsWith("sc:")) {
+          const recoveryCandidates = data.startsWith("sc:tr:")
+            ? ["sc:trade", "sc:home"]
+            : data === "sc:home"
+              ? []
+              : ["sc:home"];
+          for (const recoveryData of recoveryCandidates) {
+            const recoveryCallback = await dispatchTelegramPluginInteractiveHandler({
+              data: recoveryData,
+              callbackId: `${callback.id}:recover:${recoveryData}`,
+              ctx: {
+                accountId,
+                callbackId: callback.id,
+                conversationId: callbackConversationId,
+                parentConversationId: callbackThreadId != null ? String(chatId) : undefined,
+                senderId: senderId || undefined,
+                senderUsername: senderUsername || undefined,
+                threadId: callbackThreadId,
+                isGroup,
+                isForum,
+                auth: {
+                  isAuthorizedSender: true,
+                },
+                callbackMessage: {
+                  messageId: callbackMessage.message_id,
+                  chatId: String(chatId),
+                  messageText: callbackMessage.text ?? callbackMessage.caption,
+                },
+              },
+              respond: pluginResponder,
+            });
+            if (pluginResponseEmitted || recoveryCallback.handled) {
+              if (pluginResponseEmitted) {
+                pluginResponsePath = `fallback_recovered:${recoveryData}`;
+                break;
+              }
+            }
+          }
+        }
+        if (
+          pluginResponsePath === "edit_message_not_modified_suppressed" &&
+          data.startsWith("sc:")
+        ) {
+          const hint = data.startsWith("sc:tr:")
+            ? buildTradeNotModifiedHintText()
+            : "ℹ️ 畫面已是最新狀態；若看不到更新，請按「返回首頁」重新載入。";
+          await replyToCallbackChat(hint, {
+            reply_markup: buildControlFallbackReplyMarkup(),
+          });
+          pluginResponsePath = data.startsWith("sc:tr:")
+            ? "edit_message_not_modified_trade_hint"
+            : "edit_message_not_modified_hint";
+        }
+        if (!pluginResponseEmitted && pluginCallback.duplicate && data.startsWith("sc:")) {
+          const hint = data.startsWith("sc:tr:")
+            ? buildTradeNotModifiedHintText()
+            : "ℹ️ 畫面已是最新狀態；若看不到更新，請按「返回首頁」重新載入。";
+          await replyToCallbackChat(hint, {
+            reply_markup: buildControlFallbackReplyMarkup(),
+          });
+          pluginResponsePath = data.startsWith("sc:tr:")
+            ? "duplicate_trade_hint"
+            : "duplicate_hint";
+        }
+        if (!pluginResponseEmitted && !pluginCallback.duplicate && data.startsWith("sc:")) {
+          await replyToCallbackChat(buildNoVisibleOutputFallbackText(), {
+            reply_markup: buildControlFallbackReplyMarkup(),
+          });
+          pluginResponsePath = "fallback_no_visible_output";
+        } else if (!pluginResponseEmitted && pluginCallback.duplicate) {
+          pluginResponsePath = "duplicate";
+        }
+        emitControlCallbackTrace({
+          matched: pluginCallback.matched,
+          handled: pluginCallback.handled,
+          duplicate: pluginCallback.duplicate,
+          emitPath: pluginResponsePath,
+        });
+        return;
+      }
+      if (!pluginCallback.matched && data.startsWith("sc:")) {
+        pluginResponsePath = "plugin_not_matched";
+        await replyToCallbackChat(
+          "⚠️ 控制面板尚未啟用（找不到對應功能模組）。請先啟用 Automation 插件後再試一次。",
+          {
+            reply_markup: buildTelegramReturnMainMenuReplyMarkup(),
+          },
+        );
+        emitControlCallbackTrace({
+          matched: pluginCallback.matched,
+          handled: pluginCallback.handled,
+          duplicate: pluginCallback.duplicate,
+          emitPath: pluginResponsePath,
+        });
         return;
       }
 
@@ -1470,6 +1946,9 @@ export const registerTelegramHandlers = ({
           logVerbose(
             `Blocked telegram approval callback from ${senderId || "unknown"} (not authorized)`,
           );
+          await replyToCallbackChat("你沒有權限使用這個指令。", {
+            reply_markup: buildTelegramReturnMainMenuReplyMarkup(),
+          });
           return;
         }
         try {
@@ -1494,7 +1973,7 @@ export const registerTelegramHandlers = ({
         } catch (editErr) {
           const errStr = String(editErr);
           if (
-            errStr.includes("message is not modified") ||
+            isMessageNotModifiedError(editErr) ||
             errStr.includes("there is no text in the message to edit")
           ) {
             return;
@@ -1542,8 +2021,7 @@ export const registerTelegramHandlers = ({
         try {
           await editCallbackMessage(result.text, keyboard ? { reply_markup: keyboard } : undefined);
         } catch (editErr) {
-          const errStr = String(editErr);
-          if (!errStr.includes("message is not modified")) {
+          if (!isMessageNotModifiedError(editErr)) {
             throw new TelegramRetryableCallbackError(editErr);
           }
         }
@@ -1566,6 +2044,9 @@ export const registerTelegramHandlers = ({
           logVerbose(
             `Blocked telegram model callback from ${senderId || "unknown"} (not authorized for /models)`,
           );
+          await replyToCallbackChat("你沒有權限使用這個指令。", {
+            reply_markup: buildTelegramReturnMainMenuReplyMarkup(),
+          });
           return;
         }
         let sessionState: ReturnType<typeof resolveTelegramSessionState>;
@@ -1605,7 +2086,7 @@ export const registerTelegramHandlers = ({
                 text,
                 keyboard ? { reply_markup: keyboard, ...extra } : extra,
               );
-            } else if (!errStr.includes("message is not modified")) {
+            } else if (!isMessageNotModifiedError(editErr)) {
               throw editErr;
             }
           }
@@ -1614,7 +2095,7 @@ export const registerTelegramHandlers = ({
         if (modelCallback.type === "providers" || modelCallback.type === "back") {
           if (providers.length === 0) {
             try {
-              await editMessageWithButtons("No providers available.", []);
+              await editMessageWithButtons("目前沒有可用的供應商。", []);
             } catch (err) {
               throw new TelegramRetryableCallbackError(err);
             }
@@ -1626,7 +2107,7 @@ export const registerTelegramHandlers = ({
           }));
           const buttons = buildTelegramModelsMenuButtons({ providers: providerInfos });
           try {
-            await editMessageWithButtons("Select a provider:", buttons);
+            await editMessageWithButtons("請選擇供應商：", buttons);
           } catch (err) {
             throw new TelegramRetryableCallbackError(err);
           }
@@ -1644,10 +2125,7 @@ export const registerTelegramHandlers = ({
             }));
             const buttons = buildTelegramModelsMenuButtons({ providers: providerInfos });
             try {
-              await editMessageWithButtons(
-                `Unknown provider: ${provider}\n\nSelect a provider:`,
-                buttons,
-              );
+              await editMessageWithButtons(`找不到供應商：${provider}\n\n請選擇供應商：`, buttons);
             } catch (err) {
               throw new TelegramRetryableCallbackError(err);
             }
@@ -1699,7 +2177,7 @@ export const registerTelegramHandlers = ({
             const buttons = buildTelegramModelsMenuButtons({ providers: providerInfos });
             try {
               await editMessageWithButtons(
-                `Could not resolve model "${selection.model}".\n\nSelect a provider:`,
+                `無法解析模型「${selection.model}」。\n\n請選擇供應商：`,
                 buttons,
               );
             } catch (err) {
@@ -1712,7 +2190,7 @@ export const registerTelegramHandlers = ({
           if (!modelSet?.has(selection.model)) {
             try {
               await editMessageWithButtons(
-                `❌ Model "${selection.provider}/${selection.model}" is not allowed.`,
+                `❌ 模型「${selection.provider}/${selection.model}」不在允許清單中。`,
                 [],
               );
             } catch (err) {
@@ -1763,13 +2241,13 @@ export const registerTelegramHandlers = ({
             const escapeHtml = (text: string) =>
               text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
             const actionText = isDefaultSelection
-              ? "reset to default"
-              : `changed to <b>${escapeHtml(selection.provider)}/${escapeHtml(selection.model)}</b>`;
+              ? "已重設為預設模型"
+              : `已切換為 <b>${escapeHtml(selection.provider)}/${escapeHtml(selection.model)}</b>`;
             const scopeText = isDefaultSelection
-              ? "Session selection cleared. Runtime unchanged. New replies use the agent's configured default."
-              : `Session-only model selection. Runtime unchanged. Use /model ${escapeHtml(selection.provider)}/${escapeHtml(selection.model)} --runtime &lt;runtime&gt; to switch harnesses. The agent default in openclaw.json is unchanged; /reset or a new session may return to that default.`;
+              ? "已清除本次會話的模型選擇。執行階段設定不變；後續回覆會使用 agent 預設模型。"
+              : `這是僅限本次會話的模型選擇，執行階段設定不變。若要切換執行器，請使用 /model ${escapeHtml(selection.provider)}/${escapeHtml(selection.model)} --runtime &lt;runtime&gt;。openclaw.json 的 agent 預設值不會變更；/reset 或新會話可能回到預設。`;
             await editMessageWithButtons(
-              `✅ Model ${actionText}\n\n${scopeText}`,
+              `✅ 模型${actionText}\n\n${scopeText}`,
               [], // Empty buttons = remove inline keyboard
               { parse_mode: "HTML" },
             );
@@ -1777,7 +2255,7 @@ export const registerTelegramHandlers = ({
             if (err instanceof TelegramRetryableCallbackError) {
               throw err;
             }
-            await editMessageWithButtons(`❌ Failed to change model: ${String(err)}`, []);
+            await editMessageWithButtons(`❌ 切換模型失敗：${String(err)}`, []);
           }
           return;
         }
@@ -1785,7 +2263,64 @@ export const registerTelegramHandlers = ({
         return;
       }
 
+      const capitalSemiCallback = parseCapitalSemiCallbackData(data);
+      if (capitalSemiCallback) {
+        const resolveCapitalSemiApprovalCallback =
+          telegramDeps.resolveCapitalSemiApprovalCallback ??
+          resolveCapitalSemiApprovalCallbackFromScript;
+        let callbackResult: CapitalSemiCallbackResult;
+        try {
+          callbackResult = await resolveCapitalSemiApprovalCallback({
+            repoRoot: process.env.OPENCLAW_REPO_ROOT || process.cwd(),
+            action: capitalSemiCallback.action,
+            callbackData: capitalSemiCallback.callbackData,
+          });
+        } catch (resolveErr) {
+          throw new TelegramRetryableCallbackError(resolveErr);
+        }
+        if (capitalSemiCallback.action !== "refresh") {
+          try {
+            await clearCallbackButtons();
+          } catch (editErr) {
+            const errStr = String(editErr);
+            if (
+              !isMessageNotModifiedError(editErr) &&
+              !errStr.includes("there is no text in the message to edit")
+            ) {
+              logVerbose(`telegram: failed to clear capital semi callback buttons: ${errStr}`);
+            }
+          }
+        }
+        await replyToCallbackChat(callbackResult.replyText);
+        return;
+      }
+
       const nativeCallbackCommand = parseTelegramNativeCommandCallbackData(data);
+      if (nativeCallbackCommand === "/start" || nativeCallbackCommand === "/menu") {
+        await replyToCallbackChat(TELEGRAM_MAIN_MENU_TEXT, {
+          reply_markup: buildTelegramMainMenuReplyMarkup(),
+        });
+        return;
+      }
+      if (
+        nativeCallbackCommand &&
+        !isTelegramModelCallbackAuthorized({
+          chatId,
+          isGroup,
+          senderId,
+          senderUsername,
+          context: eventAuthContext,
+          cfg,
+        })
+      ) {
+        logVerbose(
+          `Blocked telegram native callback from ${senderId || "unknown"} (not authorized for ${nativeCallbackCommand})`,
+        );
+        await replyToCallbackChat("你沒有權限使用這個指令。", {
+          reply_markup: buildTelegramReturnMainMenuReplyMarkup(),
+        });
+        return;
+      }
       const syntheticMessage = buildSyntheticTextMessage({
         base: withResolvedTelegramForumFlag(callbackMessage, isForum),
         from: callback.from,
@@ -1806,6 +2341,17 @@ export const registerTelegramHandlers = ({
         throw err.cause;
       }
       runtime.error?.(danger(`callback handler failed: ${String(err)}`));
+      const callbackMessage = callback.message;
+      if (callbackMessage) {
+        await withTelegramApiErrorLogging({
+          operation: "sendMessage",
+          runtime,
+          fn: () =>
+            bot.api.sendMessage(callbackMessage.chat.id, "處理你的請求時發生錯誤，請稍後再試。", {
+              reply_markup: buildTelegramReturnMainMenuReplyMarkup(),
+            }),
+        }).catch(() => {});
+      }
     }
   });
 

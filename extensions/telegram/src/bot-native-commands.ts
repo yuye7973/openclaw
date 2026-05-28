@@ -1,5 +1,7 @@
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import { promisify } from "node:util";
 import type { Bot, Context } from "grammy";
 import { resolveDefaultModelForAgent } from "openclaw/plugin-sdk/agent-runtime";
 import { resolveChannelStreamingBlockEnabled } from "openclaw/plugin-sdk/channel-streaming";
@@ -93,10 +95,53 @@ import {
 } from "./group-access.js";
 import { resolveTelegramGroupPromptSettings } from "./group-config-helpers.js";
 import { buildInlineKeyboard } from "./inline-keyboard.js";
+import { resolveOpenClawRepoRoot } from "./repo-root-runtime.js";
+import { buildTelegramRuntimeStatusCommandPayload } from "./runtime-status-command-adapter.js";
 import { recordSentMessage } from "./sent-message-cache.js";
 
-const EMPTY_RESPONSE_FALLBACK = "No response generated. Please try again.";
+const EMPTY_RESPONSE_FALLBACK = "這次沒有產生可回覆內容，請稍後再試。";
 const TELEGRAM_NATIVE_COMMAND_CALLBACK_PREFIX = "tgcmd:";
+export const TELEGRAM_MAIN_MENU_TEXT = "🏠 主選單\n\n請選擇要查看的功能：";
+export const CAPITAL_QUOTE_TELEGRAM_COMMAND = {
+  command: "quote",
+  description: "查詢交易報價與狀態",
+} as const;
+export const CAPITAL_STATUS_TELEGRAM_COMMAND = {
+  command: "capital_status",
+  description: "查詢交易檢查清單總狀態",
+} as const;
+export const OKX_STATUS_TELEGRAM_COMMAND = {
+  command: "okx_status",
+  description: "查詢 OKX 交易就緒狀態",
+} as const;
+export const MENU_TELEGRAM_COMMAND = {
+  command: "menu",
+  description: "開啟中控主選單",
+} as const;
+const CAPITAL_QUOTE_REPLY_SCRIPT = path.join(
+  "scripts",
+  "openclaw-capital-quote-telegram-reply.mjs",
+);
+const CAPITAL_SERVICE_STATUS_SCRIPT = path.join("scripts", "openclaw-capital-service-status.mjs");
+const CAPITAL_MASTER_FLOW_CHECKLIST_SCRIPT = path.join(
+  "scripts",
+  "openclaw-capital-master-flow-checklist.mjs",
+);
+const OKX_CURRENT_READINESS_SUMMARY_SCRIPT = path.join(
+  "scripts",
+  "openclaw-okx-current-readiness-summary.mjs",
+);
+const CAPITAL_TELEGRAM_SIMULATED_LIVE_ORDER_SCRIPT = path.join(
+  "scripts",
+  "openclaw-capital-telegram-simulated-live-order.mjs",
+);
+const CAPITAL_TELEGRAM_LIVE_ORDER_EXECUTE_SCRIPT = path.join(
+  "scripts",
+  "openclaw-capital-telegram-live-order-execute.mjs",
+);
+const CAPITAL_QUOTE_REPLY_TIMEOUT_MS = 45_000;
+const CAPITAL_QUOTE_REPLY_MAX_BUFFER = 1024 * 1024;
+const execFileAsync = promisify(execFile);
 
 type TelegramNativeCommandContext = Context & { match?: string };
 type TelegramChunkMode = ReturnType<
@@ -258,6 +303,454 @@ function normalizeTelegramNativeReplyPayload(
 
 function hasRenderableTelegramNativeReplyPayload(result: TelegramNativeReplyPayload): boolean {
   return resolveSendableOutboundReplyParts(result).hasContent;
+}
+
+function readCapitalQuoteReplyText(value: unknown): string {
+  if (!value || typeof value !== "object" || !("replyText" in value)) {
+    return "";
+  }
+  const replyText = (value as { replyText?: unknown }).replyText;
+  return typeof replyText === "string" ? replyText.trim() : "";
+}
+
+function formatCapitalQuoteCommandError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/\s+/gu, " ").trim().slice(0, 240) || "未知錯誤";
+}
+
+function localizeCapitalReplyText(value: string): string {
+  return value
+    .replace(/paper-only/giu, "僅紙上模擬")
+    .replace(/\bREADY\b/gu, "正常")
+    .replace(/\bBLOCKED\b/gu, "阻擋")
+    .replace(/\bunknown\b/giu, "未知")
+    .replace(/\bsession_closed\b/giu, "收盤時段")
+    .replace(/\bfresh matched\b/giu, "即時符合")
+    .replace(/\bfresh callback\b/giu, "即時回呼")
+    .replace(/\bstale\b/giu, "過期");
+}
+
+function normalizeCapitalStatusText(value: unknown): string {
+  const normalized = normalizeOptionalString(value);
+  return normalized ? normalized.replace(/\s+/gu, " ").trim() : "";
+}
+
+function localizeCapitalStatusReason(value: unknown): string {
+  const normalized = normalizeCapitalStatusText(value);
+  if (!normalized) {
+    return "";
+  }
+  const exactMap: Record<string, string> = {
+    allowLiveTrading_false: "未開啟真單權限",
+    account_and_position_data_available: "帳戶與倉位資料可用",
+    paper_only_ready: "紙上交易可用",
+    session_closed: "收盤時段",
+    blocked: "阻擋",
+    ready: "正常",
+  };
+  const exact = exactMap[normalized];
+  if (exact) {
+    return exact;
+  }
+  return normalized
+    .replace(/:READY\b/gu, ":正常")
+    .replace(/:BLOCKED\b/gu, ":阻擋")
+    .replace(/\bREADY\b/gu, "正常")
+    .replace(/\bBLOCKED\b/gu, "阻擋");
+}
+
+function shortenCapitalStatusText(value: unknown, max = 72): string {
+  const normalized = localizeCapitalStatusReason(value);
+  if (!normalized) {
+    return "";
+  }
+  return normalized.length > max ? `${normalized.slice(0, max - 1)}…` : normalized;
+}
+
+function resolveCapitalStatusSummaryLabel(value: unknown): string {
+  const normalized = normalizeCapitalStatusText(value);
+  if (!normalized) {
+    return "未知";
+  }
+  if (
+    normalized === "ready_safe" ||
+    normalized === "completed" ||
+    normalized === "pass" ||
+    normalized === "passed" ||
+    normalized === "ok" ||
+    normalized === "ready"
+  ) {
+    return "正常";
+  }
+  if (
+    normalized === "blocked_or_degraded" ||
+    normalized === "incomplete_blocked" ||
+    normalized === "blocked" ||
+    normalized === "fail" ||
+    normalized === "failed"
+  ) {
+    return "阻擋";
+  }
+  if (normalized === "partial") {
+    return "部分";
+  }
+  if (normalized === "unfinished") {
+    return "未完成";
+  }
+  return normalized;
+}
+
+function resolveCapitalStatusFlowLabel(value: unknown): string {
+  const normalized = normalizeCapitalStatusText(value);
+  if (normalized === "completed") {
+    return "正常";
+  }
+  if (normalized === "partial") {
+    return "部分";
+  }
+  if (normalized === "blocked") {
+    return "阻擋";
+  }
+  if (normalized === "unfinished") {
+    return "未完成";
+  }
+  return resolveCapitalStatusSummaryLabel(normalized);
+}
+
+function readCapitalStatusFlowLabel(checklist: Record<string, unknown>, flowId: string): string {
+  const flows = checklist.flows;
+  if (!Array.isArray(flows)) {
+    return "未知";
+  }
+  for (const flow of flows) {
+    if (!flow || typeof flow !== "object") {
+      continue;
+    }
+    const flowRecord = flow as Record<string, unknown>;
+    if (normalizeCapitalStatusText(flowRecord.id) !== flowId) {
+      continue;
+    }
+    return resolveCapitalStatusFlowLabel(flowRecord.status);
+  }
+  return "未知";
+}
+
+function buildCapitalStatusSummaryReplyText(params: {
+  serviceStatus: unknown;
+  checklistStatus: unknown;
+}): string {
+  const service =
+    params.serviceStatus && typeof params.serviceStatus === "object"
+      ? (params.serviceStatus as Record<string, unknown>)
+      : {};
+  const checklist =
+    params.checklistStatus && typeof params.checklistStatus === "object"
+      ? (params.checklistStatus as Record<string, unknown>)
+      : {};
+
+  const quote =
+    service.quote && typeof service.quote === "object"
+      ? (service.quote as Record<string, unknown>)
+      : {};
+  const positionQuery =
+    service.positionQuery && typeof service.positionQuery === "object"
+      ? (service.positionQuery as Record<string, unknown>)
+      : {};
+  const paperTrading =
+    service.paperTrading && typeof service.paperTrading === "object"
+      ? (service.paperTrading as Record<string, unknown>)
+      : {};
+  const liveOrders =
+    service.liveOrders && typeof service.liveOrders === "object"
+      ? (service.liveOrders as Record<string, unknown>)
+      : {};
+  const orderMode =
+    service.orderMode && typeof service.orderMode === "object"
+      ? (service.orderMode as Record<string, unknown>)
+      : {};
+
+  const quoteReady = quote.ready === true;
+  const queryReady = positionQuery.ready === true;
+  const paperReady = paperTrading.ready === true;
+  const liveReady = liveOrders.ready === true;
+  const quotePart = quoteReady
+    ? "正常"
+    : `阻擋：${shortenCapitalStatusText(quote.reason || quote.status || "未知原因")}`;
+  const queryPart = queryReady
+    ? "正常"
+    : `阻擋：${shortenCapitalStatusText(positionQuery.reason || positionQuery.status || "未知原因")}`;
+  const orderModePart =
+    shortenCapitalStatusText(orderMode.summary || orderMode.status, 84) || "未知";
+  const orderPart = `模擬下單=${paperReady ? "正常" : "阻擋"}；真單=${liveReady ? "正常" : "封鎖"}；模式=${orderModePart}`;
+  const reportPart = readCapitalStatusFlowLabel(checklist, "account-position-reply");
+  const checklistPart = resolveCapitalStatusSummaryLabel(checklist.status || service.status);
+  const nextSafeTask =
+    shortenCapitalStatusText(checklist.nextSafeTask || service.nextSafeTask, 220) ||
+    "先跑交易檢查清單查阻擋。";
+
+  return [
+    `[OpenClaw 交易總狀態] 清單=${checklistPart}｜報價=${quotePart}｜下單=${orderPart}｜回報=${reportPart}｜查詢=${queryPart}`,
+    `下一步：${nextSafeTask}`,
+  ].join("\n");
+}
+
+function buildOkxReadinessSummaryReplyText(statusReport: unknown): string {
+  const report =
+    statusReport && typeof statusReport === "object"
+      ? (statusReport as Record<string, unknown>)
+      : {};
+  const normalizedStatus = normalizeCapitalStatusText(report.status);
+  const summaryText = shortenCapitalStatusText(
+    report.summary_zh_tw || report.code || report.status || "未知",
+    120,
+  );
+  const blockers = Array.isArray(report.blockers)
+    ? report.blockers
+        .map((value) => shortenCapitalStatusText(value, 48))
+        .filter((value) => value.length > 0)
+    : [];
+  const safety =
+    report.safety && typeof report.safety === "object"
+      ? (report.safety as Record<string, unknown>)
+      : {};
+  const noOrderWriteValue =
+    typeof safety.noOrderWrite === "boolean" ? (safety.noOrderWrite ? "true" : "false") : "unknown";
+  const statusLabel =
+    normalizedStatus === "ready_read_only" ||
+    normalizedStatus === "pass" ||
+    normalizedStatus === "passed"
+      ? "正常"
+      : normalizedStatus === "blocked"
+        ? "阻擋"
+        : resolveCapitalStatusSummaryLabel(normalizedStatus);
+  const blockerText = blockers.length > 0 ? blockers.join("、") : "none";
+  return `[OpenClaw OKX 狀態] 狀態=${statusLabel}｜摘要=${summaryText || "未知"}｜阻擋=${blockerText}｜noOrderWrite=${noOrderWriteValue}`;
+}
+
+async function buildOkxStatusTelegramReplyFromScript(params: {
+  repoRoot?: string;
+}): Promise<string> {
+  const repoRoot = resolveOpenClawRepoRoot({
+    preferredRoot: params.repoRoot,
+    requiredRelativePath: OKX_CURRENT_READINESS_SUMMARY_SCRIPT,
+  });
+  const scriptPath = path.join(repoRoot, OKX_CURRENT_READINESS_SUMMARY_SCRIPT);
+  const failedReplyText = "[OpenClaw OKX 狀態] 封鎖：OKX readiness 檢查失敗";
+  try {
+    const result = await execFileAsync(process.execPath, [scriptPath, "--json"], {
+      cwd: repoRoot,
+      timeout: CAPITAL_QUOTE_REPLY_TIMEOUT_MS,
+      windowsHide: true,
+      maxBuffer: CAPITAL_QUOTE_REPLY_MAX_BUFFER,
+    });
+    const statusReport = JSON.parse(result.stdout || "{}") as unknown;
+    return buildOkxReadinessSummaryReplyText(statusReport);
+  } catch (error) {
+    return `${failedReplyText}｜原因=${formatCapitalQuoteCommandError(error)}｜noOrderWrite=unknown`;
+  }
+}
+
+async function buildCapitalStatusTelegramReplyFromScript(params: {
+  repoRoot?: string;
+}): Promise<string> {
+  const repoRoot = resolveOpenClawRepoRoot({
+    preferredRoot: params.repoRoot,
+    requiredRelativePath: CAPITAL_SERVICE_STATUS_SCRIPT,
+  });
+  const serviceScriptPath = path.join(repoRoot, CAPITAL_SERVICE_STATUS_SCRIPT);
+  const checklistScriptPath = path.join(repoRoot, CAPITAL_MASTER_FLOW_CHECKLIST_SCRIPT);
+  const failedReplyText = "[OpenClaw 交易總狀態] 封鎖：總狀態檢查失敗";
+  try {
+    const [serviceResult, checklistResult] = await Promise.all([
+      execFileAsync(process.execPath, [serviceScriptPath, "--json"], {
+        cwd: repoRoot,
+        timeout: CAPITAL_QUOTE_REPLY_TIMEOUT_MS,
+        windowsHide: true,
+        maxBuffer: CAPITAL_QUOTE_REPLY_MAX_BUFFER,
+      }),
+      execFileAsync(process.execPath, [checklistScriptPath, "--json"], {
+        cwd: repoRoot,
+        timeout: CAPITAL_QUOTE_REPLY_TIMEOUT_MS,
+        windowsHide: true,
+        maxBuffer: CAPITAL_QUOTE_REPLY_MAX_BUFFER,
+      }),
+    ]);
+    const serviceStatus = JSON.parse(serviceResult.stdout || "{}") as unknown;
+    const checklistStatus = JSON.parse(checklistResult.stdout || "{}") as unknown;
+    const capitalSummary = buildCapitalStatusSummaryReplyText({
+      serviceStatus,
+      checklistStatus,
+    });
+    const okxSummary = await buildOkxStatusTelegramReplyFromScript({ repoRoot });
+    return `${capitalSummary}\n${okxSummary}`;
+  } catch (error) {
+    const okxSummary = await buildOkxStatusTelegramReplyFromScript({ repoRoot });
+    return `${failedReplyText}｜原因=${formatCapitalQuoteCommandError(error)}｜真單=封鎖（僅紙上模擬）\n${okxSummary}`;
+  }
+}
+
+function isCapitalSimulatedLiveOrderQuery(query: string): boolean {
+  return /(?:模擬真單|模擬下單|simulated[-_\s]?live|simlive|paper[-_\s]?live|paper[-_\s]?(?:buy|sell))/iu.test(
+    query,
+  );
+}
+
+function isCapitalLiveOrderExecuteQuery(query: string): boolean {
+  return /(?:真實下單|真單下單|live[-_\s]?order|live[-_\s]?(?:buy|sell)|(?:^|\s)live(?:\s|$))/iu.test(
+    query,
+  );
+}
+
+export function buildTelegramMainMenuButtons(): TelegramInlineButtons {
+  const toCallback = (command: string) => buildTelegramNativeCommandCallbackData(command);
+  return [
+    [{ text: "🛰 中控狀態", callback_data: toCallback("/status") }],
+    [{ text: "📊 報價狀態", callback_data: toCallback("/quote status") }],
+    [{ text: "🧭 交易總覽", callback_data: toCallback("/capital_status") }],
+    [{ text: "🪙 OKX 狀態", callback_data: toCallback("/okx_status") }],
+    [{ text: "🟢 模擬下單（買）", callback_data: toCallback("/quote simlive tx00 buy 1") }],
+    [{ text: "🔥 真實下單（買）", callback_data: toCallback("/quote live cn0000 buy 1") }],
+  ];
+}
+
+export function buildTelegramReturnMainMenuButtons(): TelegramInlineButtons {
+  return [
+    [
+      {
+        text: "↩ 返回主選單",
+        callback_data: buildTelegramNativeCommandCallbackData("/start"),
+      },
+    ],
+  ];
+}
+
+function buildCapitalQuoteNativeCommandButtons(match?: string): TelegramInlineButtons {
+  const trimmedMatch = match?.trim();
+  const refreshQuery = trimmedMatch && trimmedMatch.length > 0 ? trimmedMatch : "status";
+  const toCallback = (command: string) => buildTelegramNativeCommandCallbackData(command);
+  return [
+    [
+      { text: "🔄 刷新報價", callback_data: toCallback(`/quote ${refreshQuery}`) },
+      { text: "📊 報價狀態", callback_data: toCallback("/quote status") },
+    ],
+    [
+      { text: "🛰 中控狀態", callback_data: toCallback("/status") },
+      { text: "🧭 交易總覽", callback_data: toCallback("/capital_status") },
+    ],
+    [
+      { text: "🪙 OKX 狀態", callback_data: toCallback("/okx_status") },
+      { text: "📡 入口自檢", callback_data: toCallback("/quote telegram") },
+    ],
+    [
+      { text: "🟢 模擬下單（買）", callback_data: toCallback("/quote simlive tx00 buy 1") },
+      { text: "🔴 模擬下單（賣）", callback_data: toCallback("/quote simlive tx00 sell 1") },
+    ],
+    [
+      { text: "🔥 真實下單（買）", callback_data: toCallback("/quote live cn0000 buy 1") },
+      { text: "🧯 真實下單（賣）", callback_data: toCallback("/quote live cn0000 sell 1") },
+    ],
+    [
+      { text: "✅ 真實平多", callback_data: toCallback("/quote live cn0000 close_long 1") },
+      { text: "✅ 真實平空", callback_data: toCallback("/quote live cn0000 close_short 1") },
+    ],
+    [
+      { text: "🟡 人工審查", callback_data: toCallback("/quote semi") },
+      { text: "✅ 同意下單", callback_data: toCallback("/quote semi approve") },
+    ],
+    [
+      { text: "⛔ 拒絕下單", callback_data: toCallback("/quote semi reject") },
+      { text: "↩ 返回主選單", callback_data: toCallback("/start") },
+    ],
+    [{ text: "📈 台指近", callback_data: toCallback("/quote tx00am") }],
+  ];
+}
+
+function buildCapitalStatusNativeCommandButtons(): TelegramInlineButtons {
+  const toCallback = (command: string) => buildTelegramNativeCommandCallbackData(command);
+  return [
+    [
+      { text: "🔄 刷新總狀態", callback_data: toCallback("/capital_status") },
+      { text: "📊 查看報價詳情", callback_data: toCallback("/quote status") },
+    ],
+    [
+      { text: "🛰 中控狀態", callback_data: toCallback("/status") },
+      { text: "🪙 OKX 狀態", callback_data: toCallback("/okx_status") },
+    ],
+    [
+      { text: "🟢 模擬下單（買）", callback_data: toCallback("/quote simlive tx00 buy 1") },
+      { text: "🔴 模擬下單（賣）", callback_data: toCallback("/quote simlive tx00 sell 1") },
+    ],
+    [
+      { text: "🔥 真實下單（買）", callback_data: toCallback("/quote live cn0000 buy 1") },
+      { text: "🧯 真實下單（賣）", callback_data: toCallback("/quote live cn0000 sell 1") },
+    ],
+    [
+      { text: "✅ 真實平多", callback_data: toCallback("/quote live cn0000 close_long 1") },
+      { text: "✅ 真實平空", callback_data: toCallback("/quote live cn0000 close_short 1") },
+    ],
+    [
+      { text: "🟡 人工審查", callback_data: toCallback("/quote semi") },
+      { text: "↩ 返回主選單", callback_data: toCallback("/start") },
+    ],
+  ];
+}
+
+async function buildCapitalQuoteTelegramReplyFromScript(params: {
+  match?: string;
+  repoRoot?: string;
+}): Promise<string> {
+  const repoRoot = resolveOpenClawRepoRoot({
+    preferredRoot: params.repoRoot,
+    requiredRelativePath: CAPITAL_QUOTE_REPLY_SCRIPT,
+  });
+  const query = `/quote ${params.match?.trim() || "status"}`.trim();
+  const simulatedLiveQuery = query.replace(/^\/quote\s*/iu, "").trim();
+  const liveOrderQuery = query.replace(/^\/quote\s*/iu, "").trim();
+  const simulatedLiveOrder = isCapitalSimulatedLiveOrderQuery(simulatedLiveQuery);
+  const executeLiveOrder = !simulatedLiveOrder && isCapitalLiveOrderExecuteQuery(liveOrderQuery);
+  const scriptPath = path.join(
+    repoRoot,
+    simulatedLiveOrder
+      ? CAPITAL_TELEGRAM_SIMULATED_LIVE_ORDER_SCRIPT
+      : executeLiveOrder
+        ? CAPITAL_TELEGRAM_LIVE_ORDER_EXECUTE_SCRIPT
+        : CAPITAL_QUOTE_REPLY_SCRIPT,
+  );
+  const scriptArgs = simulatedLiveOrder
+    ? [scriptPath, "--text", simulatedLiveQuery || "simlive tx00 buy 1", "--write-state", "--json"]
+    : executeLiveOrder
+      ? [scriptPath, "--text", liveOrderQuery || "live cn0000 buy 1", "--write-state", "--json"]
+      : [scriptPath, "--query", query, "--write-state", "--json"];
+  const fallbackReplyText = simulatedLiveOrder
+    ? "[OpenClaw 模擬真單] 封鎖：未產生模擬下單回覆｜真單=封鎖（僅紙上模擬）"
+    : executeLiveOrder
+      ? "[OpenClaw 真實下單] 封鎖：未產生真實下單回覆｜請先檢查 /capital_status"
+      : "[OpenClaw 報價] 封鎖：未產生報價回覆｜不可回舊價｜真單=封鎖（風控未開啟）";
+  const failedReplyText = simulatedLiveOrder
+    ? "[OpenClaw 模擬真單] 封鎖：模擬下單產生器失敗"
+    : executeLiveOrder
+      ? "[OpenClaw 真實下單] 封鎖：真實下單執行器失敗"
+      : "[OpenClaw 報價] 封鎖：報價產生器失敗";
+  try {
+    const { stdout } = await execFileAsync(process.execPath, scriptArgs, {
+      cwd: repoRoot,
+      timeout: CAPITAL_QUOTE_REPLY_TIMEOUT_MS,
+      windowsHide: true,
+      maxBuffer: CAPITAL_QUOTE_REPLY_MAX_BUFFER,
+    });
+    const parsed = JSON.parse(stdout || "{}") as unknown;
+    return localizeCapitalReplyText(readCapitalQuoteReplyText(parsed) || fallbackReplyText);
+  } catch (error) {
+    return (
+      failedReplyText +
+      `｜原因=${formatCapitalQuoteCommandError(error)}` +
+      (simulatedLiveOrder
+        ? "｜真單=封鎖（僅紙上模擬）"
+        : executeLiveOrder
+          ? "｜請先檢查 /capital_status"
+          : "｜不可回舊價｜真單=封鎖（風控未開啟）")
+    );
+  }
 }
 
 function isEditableTelegramProgressResult(result: TelegramNativeReplyPayload): boolean {
@@ -516,7 +1009,7 @@ async function resolveTelegramCommandAuth(params: {
     return null;
   };
   const rejectNotAuthorized = async () => {
-    return await sendAuthMessage("You are not authorized to use this command.");
+    return await sendAuthMessage("你沒有權限使用這個指令。");
   };
 
   const baseAccess = evaluateTelegramGroupBaseAccess({
@@ -532,10 +1025,10 @@ async function resolveTelegramCommandAuth(params: {
   });
   if (!baseAccess.allowed) {
     if (baseAccess.reason === "group-disabled") {
-      return await sendAuthMessage("This group is disabled.");
+      return await sendAuthMessage("此群組已停用指令。");
     }
     if (baseAccess.reason === "topic-disabled") {
-      return await sendAuthMessage("This topic is disabled.");
+      return await sendAuthMessage("此話題已停用指令。");
     }
     return await rejectNotAuthorized();
   }
@@ -560,7 +1053,7 @@ async function resolveTelegramCommandAuth(params: {
   });
   if (!policyAccess.allowed) {
     if (policyAccess.reason === "group-policy-disabled") {
-      return await sendAuthMessage("Telegram group commands are disabled.");
+      return await sendAuthMessage("此群組目前已停用 Telegram 指令。");
     }
     if (
       policyAccess.reason === "group-policy-allowlist-no-sender" ||
@@ -569,7 +1062,7 @@ async function resolveTelegramCommandAuth(params: {
       return await rejectNotAuthorized();
     }
     if (policyAccess.reason === "group-chat-not-allowed") {
-      return await sendAuthMessage("This group is not allowed.");
+      return await sendAuthMessage("此群組不在允許清單中。");
     }
   }
 
@@ -663,9 +1156,20 @@ export const registerTelegramNativeCommands = ({
         provider: "telegram",
       })
     : [];
+  const capitalStatusCommands = nativeEnabled
+    ? [
+        CAPITAL_QUOTE_TELEGRAM_COMMAND,
+        CAPITAL_STATUS_TELEGRAM_COMMAND,
+        OKX_STATUS_TELEGRAM_COMMAND,
+        MENU_TELEGRAM_COMMAND,
+      ]
+    : [];
   const reservedCommands = new Set(
     listNativeCommandSpecs().map((command) => normalizeTelegramCommandName(command.name)),
   );
+  for (const command of capitalStatusCommands) {
+    reservedCommands.add(command.command);
+  }
   for (const command of skillCommands) {
     reservedCommands.add(normalizeLowercaseStringOrEmpty(command.name));
   }
@@ -683,6 +1187,7 @@ export const registerTelegramNativeCommands = ({
     )?.("telegram") ?? [];
   const existingCommands = new Set(
     [
+      ...capitalStatusCommands.map((command) => command.command),
       ...nativeCommands.map((command) => normalizeTelegramCommandName(command.name)),
       ...customCommands.map((command) => command.command),
     ].map((command) => normalizeLowercaseStringOrEmpty(command)),
@@ -709,6 +1214,7 @@ export const registerTelegramNativeCommands = ({
     }
   };
   const allCommandsFull: Array<{ command: string; description: string }> = [
+    ...capitalStatusCommands,
     ...nativeCommands
       .map((command) => {
         const normalized = normalizeTelegramCommandName(command.name);
@@ -819,7 +1325,7 @@ export const registerTelegramNativeCommands = ({
           fn: () =>
             bot.api.sendMessage(
               chatId,
-              "Configured ACP binding is unavailable right now. Please try again.",
+              "目前無法使用已設定的 ACP 綁定，請稍後再試。",
               buildTelegramThreadParams(threadSpec) ?? {},
             ),
         });
@@ -876,6 +1382,195 @@ export const registerTelegramNativeCommands = ({
   });
 
   if (commandsToRegister.length > 0 || pluginCatalog.commands.length > 0) {
+    if (nativeEnabled) {
+      bot.command(
+        CAPITAL_QUOTE_TELEGRAM_COMMAND.command,
+        async (ctx: TelegramNativeCommandContext) => {
+          const msg = ctx.message;
+          if (!msg) {
+            return;
+          }
+          if (shouldSkipUpdate(ctx)) {
+            return;
+          }
+          const runtimeCfg = loadFreshRuntimeConfig();
+          const runtimeTelegramCfg = resolveFreshTelegramConfig(runtimeCfg);
+          const auth = await resolveTelegramCommandAuth({
+            msg,
+            bot,
+            cfg: runtimeCfg,
+            accountId,
+            telegramCfg: runtimeTelegramCfg,
+            readChannelAllowFromStore: telegramDeps.readChannelAllowFromStore,
+            allowFrom,
+            groupAllowFrom,
+            useAccessGroups,
+            resolveGroupPolicy,
+            resolveTelegramGroupConfig,
+            requireAuth: true,
+          });
+          if (!auth) {
+            return;
+          }
+          const { chatId, threadParams } = await resolveTelegramNativeCommandThreadContext({
+            msg,
+            bot,
+          });
+          const replyText = await buildCapitalQuoteTelegramReplyFromScript({
+            match: ctx.match,
+            repoRoot: process.env.OPENCLAW_REPO_ROOT || process.cwd(),
+          });
+          const replyMarkup = buildInlineKeyboard(buildCapitalQuoteNativeCommandButtons(ctx.match));
+          await withTelegramApiErrorLogging({
+            operation: "sendMessage",
+            runtime,
+            fn: () =>
+              bot.api.sendMessage(chatId, replyText, {
+                ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+                ...threadParams,
+              }),
+          });
+        },
+      );
+      bot.command(
+        CAPITAL_STATUS_TELEGRAM_COMMAND.command,
+        async (ctx: TelegramNativeCommandContext) => {
+          const msg = ctx.message;
+          if (!msg) {
+            return;
+          }
+          if (shouldSkipUpdate(ctx)) {
+            return;
+          }
+          const runtimeCfg = loadFreshRuntimeConfig();
+          const runtimeTelegramCfg = resolveFreshTelegramConfig(runtimeCfg);
+          const auth = await resolveTelegramCommandAuth({
+            msg,
+            bot,
+            cfg: runtimeCfg,
+            accountId,
+            telegramCfg: runtimeTelegramCfg,
+            readChannelAllowFromStore: telegramDeps.readChannelAllowFromStore,
+            allowFrom,
+            groupAllowFrom,
+            useAccessGroups,
+            resolveGroupPolicy,
+            resolveTelegramGroupConfig,
+            requireAuth: true,
+          });
+          if (!auth) {
+            return;
+          }
+          const { chatId, threadParams } = await resolveTelegramNativeCommandThreadContext({
+            msg,
+            bot,
+          });
+          const replyText = await buildCapitalStatusTelegramReplyFromScript({
+            repoRoot: process.env.OPENCLAW_REPO_ROOT || process.cwd(),
+          });
+          const replyMarkup = buildInlineKeyboard(buildCapitalStatusNativeCommandButtons());
+          await withTelegramApiErrorLogging({
+            operation: "sendMessage",
+            runtime,
+            fn: () =>
+              bot.api.sendMessage(chatId, replyText, {
+                ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+                ...threadParams,
+              }),
+          });
+        },
+      );
+      bot.command(
+        OKX_STATUS_TELEGRAM_COMMAND.command,
+        async (ctx: TelegramNativeCommandContext) => {
+          const msg = ctx.message;
+          if (!msg) {
+            return;
+          }
+          if (shouldSkipUpdate(ctx)) {
+            return;
+          }
+          const runtimeCfg = loadFreshRuntimeConfig();
+          const runtimeTelegramCfg = resolveFreshTelegramConfig(runtimeCfg);
+          const auth = await resolveTelegramCommandAuth({
+            msg,
+            bot,
+            cfg: runtimeCfg,
+            accountId,
+            telegramCfg: runtimeTelegramCfg,
+            readChannelAllowFromStore: telegramDeps.readChannelAllowFromStore,
+            allowFrom,
+            groupAllowFrom,
+            useAccessGroups,
+            resolveGroupPolicy,
+            resolveTelegramGroupConfig,
+            requireAuth: true,
+          });
+          if (!auth) {
+            return;
+          }
+          const { chatId, threadParams } = await resolveTelegramNativeCommandThreadContext({
+            msg,
+            bot,
+          });
+          const replyText = await buildOkxStatusTelegramReplyFromScript({
+            repoRoot: process.env.OPENCLAW_REPO_ROOT || process.cwd(),
+          });
+          const replyMarkup = buildInlineKeyboard(buildCapitalStatusNativeCommandButtons());
+          await withTelegramApiErrorLogging({
+            operation: "sendMessage",
+            runtime,
+            fn: () =>
+              bot.api.sendMessage(chatId, replyText, {
+                ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+                ...threadParams,
+              }),
+          });
+        },
+      );
+      bot.command(MENU_TELEGRAM_COMMAND.command, async (ctx: TelegramNativeCommandContext) => {
+        const msg = ctx.message;
+        if (!msg) {
+          return;
+        }
+        if (shouldSkipUpdate(ctx)) {
+          return;
+        }
+        const runtimeCfg = loadFreshRuntimeConfig();
+        const runtimeTelegramCfg = resolveFreshTelegramConfig(runtimeCfg);
+        const auth = await resolveTelegramCommandAuth({
+          msg,
+          bot,
+          cfg: runtimeCfg,
+          accountId,
+          telegramCfg: runtimeTelegramCfg,
+          readChannelAllowFromStore: telegramDeps.readChannelAllowFromStore,
+          allowFrom,
+          groupAllowFrom,
+          useAccessGroups,
+          resolveGroupPolicy,
+          resolveTelegramGroupConfig,
+          requireAuth: true,
+        });
+        if (!auth) {
+          return;
+        }
+        const { chatId, threadParams } = await resolveTelegramNativeCommandThreadContext({
+          msg,
+          bot,
+        });
+        const replyMarkup = buildInlineKeyboard(buildTelegramMainMenuButtons());
+        await withTelegramApiErrorLogging({
+          operation: "sendMessage",
+          runtime,
+          fn: () =>
+            bot.api.sendMessage(chatId, TELEGRAM_MAIN_MENU_TEXT, {
+              ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+              ...threadParams,
+            }),
+        });
+      });
+    }
     for (const command of nativeCommands) {
       const normalizedCommandName = normalizeTelegramCommandName(command.name);
       bot.command(normalizedCommandName, async (ctx: TelegramNativeCommandContext) => {
@@ -916,6 +1611,31 @@ export const registerTelegramNativeCommands = ({
           topicConfig,
           commandAuthorized,
         } = auth;
+        if (normalizedCommandName === "status") {
+          const statusPayload = buildTelegramRuntimeStatusCommandPayload({
+            commandText: "/status",
+            preferredRepoRoot: process.env.OPENCLAW_REPO_ROOT || process.cwd(),
+            includeTradingButtons: true,
+            includeReturnMainMenu: true,
+          });
+          if (statusPayload) {
+            const { threadParams } = await resolveTelegramNativeCommandThreadContext({
+              msg,
+              bot,
+            });
+            const replyMarkup = buildInlineKeyboard(statusPayload.buttons);
+            await withTelegramApiErrorLogging({
+              operation: "sendMessage",
+              runtime,
+              fn: () =>
+                bot.api.sendMessage(chatId, statusPayload.replyText, {
+                  ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+                  ...threadParams,
+                }),
+            });
+            return;
+          }
+        }
         const runtimeContext = await resolveCommandRuntimeContext({
           msg,
           runtimeCfg,
@@ -1202,7 +1922,7 @@ export const registerTelegramNativeCommands = ({
           await withTelegramApiErrorLogging({
             operation: "sendMessage",
             runtime,
-            fn: () => bot.api.sendMessage(chatId, "Command not found.", threadParams ?? {}),
+            fn: () => bot.api.sendMessage(chatId, "找不到這個指令。", threadParams ?? {}),
           });
           return;
         }

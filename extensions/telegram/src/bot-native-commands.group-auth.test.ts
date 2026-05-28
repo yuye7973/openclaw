@@ -107,7 +107,7 @@ describe("native command auth in groups", () => {
 
     expect(sendMessage).toHaveBeenCalledWith(
       -100999,
-      "You are not authorized to use this command.",
+      "你沒有權限使用這個指令。",
       expect.objectContaining({ message_thread_id: 42 }),
     );
   });
@@ -140,7 +140,7 @@ describe("native command auth in groups", () => {
 
     expect(sendMessage).toHaveBeenCalledWith(
       -100999,
-      "Telegram group commands are disabled.",
+      "此群組目前已停用 Telegram 指令。",
       expect.objectContaining({ message_thread_id: 42 }),
     );
   });
@@ -168,7 +168,7 @@ describe("native command auth in groups", () => {
 
     expect(sendMessage).toHaveBeenCalledWith(
       -100999,
-      "This group is not allowed.",
+      "此群組不在允許清單中。",
       expect.objectContaining({ message_thread_id: 42 }),
     );
   });
@@ -205,7 +205,7 @@ describe("native command auth in groups", () => {
 
     expect(sendMessage).toHaveBeenCalledWith(
       -100999,
-      "You are not authorized to use this command.",
+      "你沒有權限使用這個指令。",
       expect.objectContaining({ message_thread_id: 42 }),
     );
   });

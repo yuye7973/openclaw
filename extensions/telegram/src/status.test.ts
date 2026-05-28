@@ -139,6 +139,30 @@ describe("collectTelegramStatusIssues", () => {
     ]);
   });
 
+  it("reports connected polling runtime when transport timestamp is missing after startup grace", () => {
+    const issues = collectTelegramStatusIssues([
+      {
+        accountId: "main",
+        enabled: true,
+        configured: true,
+        running: true,
+        mode: "polling",
+        connected: true,
+        lastStartAt: Date.now() - 10 * 60_000,
+        lastTransportActivityAt: null,
+      } as ChannelAccountSnapshot,
+    ]);
+
+    expect(issues).toEqual([
+      expect.objectContaining({
+        channel: "telegram",
+        accountId: "main",
+        kind: "runtime",
+        message: expect.stringContaining("missing last transport activity timestamp"),
+      }),
+    ]);
+  });
+
   it("does not report inherited stale transport activity during a fresh polling lifecycle", () => {
     const issues = collectTelegramStatusIssues([
       {

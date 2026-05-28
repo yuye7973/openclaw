@@ -12,11 +12,12 @@ export function buildCommandsPaginationKeyboard(
   agentId?: string,
 ): Array<Array<{ text: string; callback_data: string }>> {
   const buttons: Array<{ text: string; callback_data: string }> = [];
-  const suffix = agentId ? `:${agentId}` : "";
+  const normalizedAgentId = agentId?.trim();
+  const suffix = normalizedAgentId ? `:${normalizedAgentId}` : "";
 
   if (currentPage > 1) {
     buttons.push({
-      text: "◀ Prev",
+      text: "◀ 上一頁",
       callback_data: `commands_page_${currentPage - 1}${suffix}`,
     });
   }
@@ -28,7 +29,7 @@ export function buildCommandsPaginationKeyboard(
 
   if (currentPage < totalPages) {
     buttons.push({
-      text: "Next ▶",
+      text: "下一頁 ▶",
       callback_data: `commands_page_${currentPage + 1}${suffix}`,
     });
   }

@@ -41,6 +41,10 @@ export function resolveTelegramInlineButtonsConfigScope(
 export function resolveTelegramInlineButtonsScopeFromCapabilities(
   capabilities: unknown,
 ): TelegramInlineButtonsScope {
+  const directScope = normalizeInlineButtonsScope(capabilities);
+  if (directScope) {
+    return directScope;
+  }
   if (!capabilities) {
     return DEFAULT_INLINE_BUTTONS_SCOPE;
   }
