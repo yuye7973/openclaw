@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# pre-push hook：推送前驗證 build 能成功
+# 防止 export 名稱不匹配、缺少模組等 build 錯誤被推到遠端
+set -euo pipefail
+
+ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+# 只在有 dist/ 目錄的主倉庫執行（worktree 跳過）
+if [[ ! -d "$ROOT_DIR/dist" && ! -f "$ROOT_DIR/dist/entry.js" ]]; then
+  exit 0
+fi
+
+# 檢查是否有 node/pnpm
+if ! command -v node &>/dev/null || ! command -v pnpm &>/dev/null; then
+  echo "[pre-push] 跳過 build 驗證（node 或 pnpm 不可用）"
+  exit 0
+fi
+
+echo "[pre-push] 驗證 build..."
+if ! (cd "$ROOT_DIR" && pnpm build 2>&1 | tail -5); then
+  echo ""
+  echo "============================================"
+  echo " ❌ Build 失敗！請修復後再推送。"
+  echo "    執行 'pnpm build' 查看完整錯誤。"
+  echo "============================================"
+  exit 1
+fi
+
+echo "[pre-push] ✅ Build 驗證通過"
