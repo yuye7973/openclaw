@@ -1,7 +1,7 @@
 # Agent Governance Control Plane
 
 **Status:** active index  
-**Version:** 1.0  
+**Version:** 1.1  
 **Date:** 2026-07-10
 
 This directory externalizes task routing, model selection, judgment, delegation, verification, and maintenance so future Claude sessions can operate consistently without loading the whole manual at startup.
@@ -24,6 +24,7 @@ No governance file is imported into root `CLAUDE.md`; an import would still cons
 |---|---|
 | A. Quick diagnosis | `00-diagnosis.md` |
 | B. Short Claude entry point | root `CLAUDE.md`; this index; original state in `backups/2026-07-10/` |
+| Operating architecture | `05-control-loop.md` |
 | C. Model dispatch rules | `10-model-routing.md` and `.claude/agents/*.md` |
 | D. Externalized judgment | `20-judgment-rubric.md` |
 | E. Delegation prompts | `30-delegation-prompts.md` |
@@ -42,6 +43,12 @@ Read:
 
 - `00-diagnosis.md`
 - `20-judgment-rubric.md` only if a policy decision follows
+
+### Need the end-to-end control loop, context budget, risk tiers, or proof architecture
+
+Read:
+
+- `05-control-loop.md`
 
 ### Need to delegate or select a model
 
@@ -140,6 +147,7 @@ Current model aliases implement those roles but may change. No critical workflow
 ```text
 classify task and risk
 → load smallest relevant instructions
+→ define an observable contract
 → delegate high-volume work with goal/acceptance/report contract
 → synthesize evidence, not raw process
 → execute or edit within explicit ownership
@@ -147,8 +155,11 @@ classify task and risk
 → fresh-context adversarial review
 → repair and rerun
 → durable read-back
+→ record only reusable, enforced lessons
 → report changes, proof, gaps, and resume path
 ```
+
+`05-control-loop.md` defines the complete SCOPE → CONTRACT → ROUTE → EXECUTE → PROVE → LEARN state machine and stopping logic.
 
 ## Definition of healthy governance
 
